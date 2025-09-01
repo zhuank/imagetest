@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BytePlus ModelArk Seedance 视频生成测试</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>BytePlus ModelArk Seedance 视频生成测试</h1>
+            <p>上传首尾帧和参考帧，生成AI视频</p>
+        </header>
+
+        <main>
+            <div class="form-section">
+                <h2>配置参数</h2>
+                <form id="configForm">
+                    <div class="form-group">
+                        <label for="apiKey">API Key:</label>
+                        <input type="text" id="apiKey" name="apiKey" value="0f99fa1f-9c47-4067-9587-3d5f6754a20c" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="modelName">模型名称:</label>
+                        <input type="text" id="modelName" name="modelName" value="Seedance" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="prompt">提示词:</label>
+                        <textarea id="prompt" name="prompt" rows="3" placeholder="描述您想要生成的视频内容...">Generate a video based on the provided images</textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="ratio">视频比例:</label>
+                            <select id="ratio" name="ratio">
+                                <option value="1092x1080">1092x1080 (近似1:1)</option>
+                                <option value="1920x1080">1920x1080 (16:9)</option>
+                                <option value="1080x1920">1080x1920 (9:16)</option>
+                                <option value="1280x720">1280x720 (16:9)</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="duration">时长(秒):</label>
+                            <input type="number" id="duration" name="duration" value="5" min="1" max="10" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="fps">帧率:</label>
+                            <select id="fps" name="fps">
+                                <option value="24">24 FPS</option>
+                                <option value="30">30 FPS</option>
+                                <option value="60">60 FPS</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="watermark">水印:</label>
+                            <select id="watermark" name="watermark">
+                                <option value="false">无水印</option>
+                                <option value="true">有水印</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="upload-section">
+                <h2>上传图片</h2>
+                
+                <!-- 首帧上传区域 -->
+                <div class="upload-group">
+                    <h3>首帧上传</h3>
+                    <p class="upload-description">上传视频的第一帧图片</p>
+                    <div class="upload-area" id="startFrameUploadArea">
+                        <div class="upload-placeholder">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7,10 12,15 17,10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            <p>点击或拖拽上传首帧图片</p>
+                            <p class="upload-hint">支持 PNG, JPG, JPEG, GIF, BMP, WebP 格式</p>
+                        </div>
+                        <input type="file" id="startFrameInput" accept="image/*" style="display: none;">
+                    </div>
+                    <div class="image-preview" id="startFramePreview"></div>
+                </div>
+                
+                <!-- 尾帧上传区域 -->
+                <div class="upload-group">
+                    <h3>尾帧上传</h3>
+                    <p class="upload-description">上传视频的最后一帧图片（可选）</p>
+                    <div class="upload-area" id="endFrameUploadArea">
+                        <div class="upload-placeholder">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7,10 12,15 17,10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            <p>点击或拖拽上传尾帧图片</p>
+                            <p class="upload-hint">支持 PNG, JPG, JPEG, GIF, BMP, WebP 格式</p>
+                        </div>
+                        <input type="file" id="endFrameInput" accept="image/*" style="display: none;">
+                    </div>
+                    <div class="image-preview" id="endFramePreview"></div>
+                </div>
+                
+                <!-- 参考帧上传区域 -->
+                <div class="upload-group">
+                    <h3>参考帧上传</h3>
+                    <p class="upload-description">上传多张参考图片用于视频生成（可选）</p>
+                    <div class="upload-area" id="referenceFramesUploadArea">
+                        <div class="upload-placeholder">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7,10 12,15 17,10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            <p>点击或拖拽上传参考帧图片</p>
+                            <p class="upload-hint">支持 PNG, JPG, JPEG, GIF, BMP, WebP 格式，可选择多张</p>
+                        </div>
+                        <input type="file" id="referenceFramesInput" multiple accept="image/*" style="display: none;">
+                    </div>
+                    <div class="image-preview" id="referenceFramesPreview"></div>
+                </div>
+                
+                <div class="upload-actions">
+                    <button type="button" id="clearImages" class="btn btn-secondary">清空所有图片</button>
+                    <button type="button" id="uploadImages" class="btn btn-primary" disabled>上传图片</button>
+                </div>
+            </div>
+
+            <div class="generation-section">
+                <h2>生成视频</h2>
+                <button type="button" id="generateVideo" class="btn btn-success" disabled>开始生成视频</button>
+                
+                <div class="progress-section" id="progressSection" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <p class="progress-text" id="progressText">准备中...</p>
+                </div>
+                
+                <div class="result-section" id="resultSection" style="display: none;">
+                    <h3>生成结果</h3>
+                    <div class="video-container">
+                        <video id="resultVideo" controls style="display: none;">
+                            您的浏览器不支持视频播放。
+                        </video>
+                    </div>
+                    <div class="result-actions">
+                        <a id="downloadLink" class="btn btn-primary" style="display: none;" download>下载视频</a>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 BytePlus ModelArk Seedance 视频生成测试工具</p>
+        </footer>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
