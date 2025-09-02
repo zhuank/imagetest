@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, jsonify, send_file, url_for
 from werkzeug.utils import secure_filename
 import uuid
 from urllib.parse import urlparse
+from volcenginesdkarkruntime import Ark
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -22,6 +23,11 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# 新增：Ark 客户端
+def get_ark_client(api_key: str) -> Ark:
+    base_url = os.environ.get("ARK_BASE_URL", "https://ark.ap-southeast.bytepluses.com/api/v3")
+    return Ark(api_key=api_key, base_url=base_url)
 
 def upload_to_transfer_sh(file_path):
     """上传文件到transfer.sh获取直接链接"""
@@ -69,71 +75,67 @@ def rehost_image(file_path):
     return None
 
 def create_video_task(api_key, model_name, image_urls, **kwargs):
-    """创建视频生成任务"""
-    url = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
-    
-    # 构建请求数据
-    req_data = {
-        "model": model_name,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": kwargs.get('prompt', 'Generate a video based on the provided images')
-                    }
-                ]
-            }
-        ],
-        "extra_body": {
-            "req_type": "video_generation",
-            "image_urls": image_urls,
-            "ratio": kwargs.get('ratio', '1092x1080'),
-            "duration": kwargs.get('duration', 5),
-            "fps": kwargs.get('fps', 24),
-            "watermark": kwargs.get('watermark', False)
-        }
-    }
-    
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    
+    """使用方舟SDK创建参考图生视频任务，返回 {"id": task_id} 或 {"error": ...} """
     try:
-        response = requests.post(url, json=req_data, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.json()
+        client = get_ark_client(api_key)
+        content = [
+            {
+                "type": "text",
+                "text": kwargs.get('prompt', 'Generate a video based on the provided images')
+            }
+        ]
+        for url in image_urls:
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": url},
+                "role": "reference_image",
+            })
+        model_id = model_name or "seedance-1-0-lite-i2v-250428"
+        create_result = client.content_generation.tasks.create(
+            model=model_id,
+            content=content,
+        )
+        task_id = None
+        if isinstance(create_result, dict):
+            task_id = create_result.get('id') or create_result.get('task_id')
+        else:
+            try:
+                data = json.loads(create_result.model_dump_json())
+                task_id = data.get('id') or data.get('task_id')
+            except Exception:
+                task_id = getattr(create_result, 'id', None)
+        if not task_id:
+            return {"error": f"No task id in create_result: {str(create_result)}"}
+        return {"id": task_id}
     except Exception as e:
         return {"error": str(e)}
 
 def poll_task_status(api_key, task_id, max_wait_time=300):
-    """轮询任务状态"""
-    url = f"https://ark.cn-beijing.volces.com/api/v3/chat/completions/{task_id}"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    
-    start_time = time.time()
-    while time.time() - start_time < max_wait_time:
-        try:
-            response = requests.get(url, headers=headers, timeout=30)
-            response.raise_for_status()
-            result = response.json()
-            
-            status = result.get('status', 'unknown')
-            if status == 'completed':
-                return result
-            elif status == 'failed':
-                return {"error": "Task failed", "details": result}
-            
-            time.sleep(5)  # 等待5秒后再次检查
-        except Exception as e:
-            return {"error": f"Polling error: {str(e)}"}
-    
-    return {"error": "Task timeout"}
+    """使用方舟SDK轮询任务状态，返回最终结果。成功时 status == 'succeeded' 且 content.video_url 可用。"""
+    try:
+        client = get_ark_client(api_key)
+        start_time = time.time()
+        while time.time() - start_time < max_wait_time:
+            result = client.content_generation.tasks.get(task_id=task_id)
+            if isinstance(result, dict):
+                data = result
+            else:
+                try:
+                    data = json.loads(result.model_dump_json())
+                except Exception:
+                    data = {
+                        "status": getattr(result, 'status', None),
+                        "content": getattr(result, 'content', None),
+                    }
+            status = (data or {}).get('status')
+            if status == 'succeeded':
+                return data
+            if status == 'failed':
+                return {"error": "Task failed", "details": data}
+            time.sleep(2)
+        return {"error": "Task timeout"}
+    except Exception as e:
+        return {"error": f"Polling error: {str(e)}"}
 
 def download_video(video_url, output_path):
     """下载生成的视频"""
@@ -256,10 +258,10 @@ def generate_video():
         'watermark': data.get('watermark', False)
     }
     
-    # 使用固定的模型名称
-    model_name = "Seedance-I2V-Reference"
+    # 使用前端传入模型或默认 Seedance I2V 模型ID
+    model_name = data.get('model_name') or "seedance-1-0-lite-i2v-250428"
     
-    # 创建视频生成任务
+    # 创建视频生成任务（SDK）
     task_result = create_video_task(api_key, model_name, image_urls, **video_params)
     
     if 'error' in task_result:
@@ -269,33 +271,29 @@ def generate_video():
     if not task_id:
         return jsonify({'error': 'No task ID returned'}), 500
     
-    # 轮询任务状态直到完成
+    # 轮询任务状态直到完成（SDK）
     result = poll_task_status(api_key, task_id, max_wait_time=300)
     
     if 'error' in result:
         return jsonify({'error': f'Task polling failed: {result["error"]}'}), 500
     
-    # 如果任务完成，下载视频
-    if result.get('status') == 'completed':
-        video_url = result.get('video_url')
-        if video_url:
-            # 生成唯一的输出文件名
-            output_filename = f"{task_id}.mp4"
-            output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
-            
-            if download_video(video_url, output_path):
-                return jsonify({
-                    'success': True,
-                    'task_id': task_id,
-                    'video_url': url_for('download_video_file', filename=output_filename, _external=True),
-                    'message': 'Video generation completed successfully'
-                })
-            else:
-                return jsonify({'error': 'Failed to download video'}), 500
+    status = result.get('status')
+    content = result.get('content') or {}
+    video_url = (content or {}).get('video_url') or result.get('video_url')
+    if status == 'succeeded' and video_url:
+        output_filename = f"{task_id}.mp4"
+        output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+        if download_video(video_url, output_path):
+            return jsonify({
+                'success': True,
+                'task_id': task_id,
+                'video_url': url_for('download_video_file', filename=output_filename, _external=True),
+                'message': 'Video generation completed successfully'
+            })
         else:
-            return jsonify({'error': 'No video URL in completed task'}), 500
+            return jsonify({'error': 'Failed to download video'}), 500
     else:
-        return jsonify({'error': f'Task failed with status: {result.get("status", "unknown")}'}), 500
+        return jsonify({'error': f'Task failed with status: {status or "unknown"}'}), 500
 
 @app.route('/status/<task_id>')
 def check_status(task_id):
@@ -304,31 +302,28 @@ def check_status(task_id):
     if not api_key:
         return jsonify({'error': 'API key required'}), 400
     
-    # 轮询任务状态
     result = poll_task_status(api_key, task_id, max_wait_time=60)  # 限制为60秒
     
     if 'error' in result:
         return jsonify({'error': result['error']}), 500
     
-    # 如果任务完成，下载视频
-    if result.get('status') == 'completed':
-        video_url = result.get('video_url')
-        if video_url:
-            # 生成唯一的输出文件名
-            output_filename = f"{task_id}.mp4"
-            output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
-            
-            if download_video(video_url, output_path):
-                return jsonify({
-                    'status': 'completed',
-                    'video_url': url_for('download_video_file', filename=output_filename, _external=True),
-                    'local_path': output_path
-                })
-            else:
-                return jsonify({'error': 'Failed to download video'}), 500
+    status = result.get('status')
+    content = result.get('content') or {}
+    video_url = (content or {}).get('video_url') or result.get('video_url')
+    if status == 'succeeded' and video_url:
+        output_filename = f"{task_id}.mp4"
+        output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+        if download_video(video_url, output_path):
+            return jsonify({
+                'status': 'succeeded',
+                'video_url': url_for('download_video_file', filename=output_filename, _external=True),
+                'local_path': output_path
+            })
+        else:
+            return jsonify({'error': 'Failed to download video'}), 500
     
     return jsonify({
-        'status': result.get('status', 'unknown'),
+        'status': status or 'unknown',
         'message': 'Task is still processing'
     })
 
