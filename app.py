@@ -29,17 +29,33 @@ def get_ark_client(api_key: str) -> Ark:
     base_url = os.environ.get("ARK_BASE_URL", "https://ark.ap-southeast.bytepluses.com/api/v3")
     return Ark(api_key=api_key, base_url=base_url)
 
+# 新增：多地域客户端候选（自动回退）
+def get_ark_clients(api_key: str):
+    prefer = os.environ.get("ARK_BASE_URL")
+    if prefer:
+        bases = [prefer]
+    else:
+        bases = [
+            "https://ark.ap-southeast.bytepluses.com/api/v3",
+            "https://ark.cn-beijing.volces.com/api/v3",
+        ]
+    return [Ark(api_key=api_key, base_url=b) for b in bases]
+
 def upload_to_transfer_sh(file_path):
-    """上传文件到transfer.sh获取直接链接"""
+    """上传文件到 transfer.sh 获取直接链接（使用 PUT 并带文件名）。"""
     try:
+        filename = os.path.basename(file_path)
+        url = f"https://transfer.sh/{filename}"
         with open(file_path, 'rb') as f:
-            response = requests.post(
-                'https://transfer.sh/',
-                files={'file': f},
-                timeout=30
-            )
-        if response.status_code == 200:
-            return response.text.strip()
+            resp = requests.put(url, data=f, timeout=180)
+        if resp.status_code in (200, 201):
+            link = resp.text.strip()
+            if link.startswith("http"):
+                return link
+            else:
+                print(f"Transfer.sh unexpected response: {link}")
+        else:
+            print(f"Transfer.sh upload failed: HTTP {resp.status_code} {resp.text}")
     except Exception as e:
         print(f"Transfer.sh upload failed: {e}")
     return None
@@ -61,23 +77,24 @@ def upload_to_catbox(file_path):
     return None
 
 def rehost_image(file_path):
-    """将本地图片重新托管到公共服务获取直接链接"""
-    # 尝试transfer.sh
-    url = upload_to_transfer_sh(file_path)
-    if url:
-        return url
-    
-    # 尝试catbox.moe
+    """将本地图片重新托管到公共服务获取直接链接（优先 catbox，其次 transfer.sh，再次 0x0.st）"""
+    # 优先 catbox（在国内网络更稳定）
     url = upload_to_catbox(file_path)
     if url:
         return url
-    
+    # 尝试 transfer.sh（PUT）
+    url = upload_to_transfer_sh(file_path)
+    if url:
+        return url
+    # 尝试 0x0.st 兜底
+    url = upload_to_0x0(file_path)
+    if url:
+        return url
     return None
 
 def create_video_task(api_key, model_name, image_urls, **kwargs):
     """使用方舟SDK创建参考图生视频任务，返回 {"id": task_id} 或 {"error": ...} """
     try:
-        client = get_ark_client(api_key)
         content = [
             {
                 "type": "text",
@@ -91,49 +108,63 @@ def create_video_task(api_key, model_name, image_urls, **kwargs):
                 "role": "reference_image",
             })
         model_id = model_name or "seedance-1-0-lite-i2v-250428"
-        create_result = client.content_generation.tasks.create(
-            model=model_id,
-            content=content,
-        )
-        task_id = None
-        if isinstance(create_result, dict):
-            task_id = create_result.get('id') or create_result.get('task_id')
-        else:
+
+        last_err = None
+        for client in get_ark_clients(api_key):
             try:
-                data = json.loads(create_result.model_dump_json())
-                task_id = data.get('id') or data.get('task_id')
-            except Exception:
-                task_id = getattr(create_result, 'id', None)
-        if not task_id:
-            return {"error": f"No task id in create_result: {str(create_result)}"}
-        return {"id": task_id}
+                create_result = client.content_generation.tasks.create(
+                    model=model_id,
+                    content=content,
+                )
+                task_id = None
+                if isinstance(create_result, dict):
+                    task_id = create_result.get('id') or create_result.get('task_id') or create_result.get('result', {}).get('id')
+                else:
+                    try:
+                        data = json.loads(create_result.model_dump_json())
+                        task_id = data.get('id') or data.get('task_id') or data.get('result', {}).get('id')
+                    except Exception:
+                        task_id = getattr(create_result, 'id', None)
+                if task_id:
+                    return {"id": task_id}
+            except Exception as e:
+                last_err = e
+                continue
+        return {"error": f"Create task failed on all base_urls: {last_err}"}
     except Exception as e:
         return {"error": str(e)}
 
 def poll_task_status(api_key, task_id, max_wait_time=300):
     """使用方舟SDK轮询任务状态，返回最终结果。成功时 status == 'succeeded' 且 content.video_url 可用。"""
     try:
-        client = get_ark_client(api_key)
         start_time = time.time()
+        last_err = None
+        clients = get_ark_clients(api_key)
         while time.time() - start_time < max_wait_time:
-            result = client.content_generation.tasks.get(task_id=task_id)
-            if isinstance(result, dict):
-                data = result
-            else:
+            for client in clients:
                 try:
-                    data = json.loads(result.model_dump_json())
-                except Exception:
-                    data = {
-                        "status": getattr(result, 'status', None),
-                        "content": getattr(result, 'content', None),
-                    }
-            status = (data or {}).get('status')
-            if status == 'succeeded':
-                return data
-            if status == 'failed':
-                return {"error": "Task failed", "details": data}
+                    result = client.content_generation.tasks.get(task_id=task_id)
+                    if isinstance(result, dict):
+                        data = result
+                    else:
+                        try:
+                            data = json.loads(result.model_dump_json())
+                        except Exception:
+                            data = {
+                                "status": getattr(result, 'status', None),
+                                "content": getattr(result, 'content', None),
+                                "result": getattr(result, 'result', None),
+                            }
+                    status = (data or {}).get('status') or (data or {}).get('result', {}).get('status')
+                    if status == 'succeeded':
+                        return data
+                    if status == 'failed':
+                        return {"error": "Task failed", "details": data}
+                except Exception as e:
+                    last_err = e
+                    continue
             time.sleep(2)
-        return {"error": "Task timeout"}
+        return {"error": f"Task timeout. last_error={last_err}"}
     except Exception as e:
         return {"error": f"Polling error: {str(e)}"}
 
@@ -237,15 +268,31 @@ def generate_video():
     """生成视频"""
     data = request.get_json()
     
-    # 验证必需参数
-    required_fields = ['api_key', 'image_urls']
+    # 验证必需参数（image_urls 必需；api_key 可从请求或环境变量获取）
+    required_fields = ['image_urls']
     for field in required_fields:
         if field not in data:
             return jsonify({'error': f'Missing required field: {field}'}), 400
+
+    # 处理 API Key：去除空白、去除可能的 Bearer 前缀；若未提供则尝试环境变量
+    api_key_raw = str(data.get('api_key', '')).strip()
+    if api_key_raw.lower().startswith('bearer '):
+        api_key_raw = api_key_raw[7:].strip()
+    if not api_key_raw:
+        env_key = os.environ.get('ARK_API_KEY', '').strip()
+        if env_key:
+            api_key = env_key
+        else:
+            return jsonify({'error': 'API key required'}), 400
+    else:
+        api_key = api_key_raw
+
+    # 可选：允许前端临时指定 base_url（覆盖当前进程的默认地域，仅对本服务生效）
+    preferred_base = str(data.get('base_url', '')).strip()
+    if preferred_base:
+        os.environ['ARK_BASE_URL'] = preferred_base
     
-    api_key = data['api_key']
     image_urls = data['image_urls']
-    
     if not image_urls or len(image_urls) == 0:
         return jsonify({'error': 'No image URLs provided'}), 400
     
@@ -265,7 +312,10 @@ def generate_video():
     task_result = create_video_task(api_key, model_name, image_urls, **video_params)
     
     if 'error' in task_result:
-        return jsonify({'error': f'Task creation failed: {task_result["error"]}'}), 500
+        # 若明确鉴权失败，返回 401，便于前端提示更准确
+        err_text = str(task_result['error'])
+        status_code = 401 if ('401' in err_text or 'Unauthorized' in err_text or 'AuthenticationError' in err_text) else 500
+        return jsonify({'error': f'Task creation failed: {task_result["error"]}'}), status_code
     
     task_id = task_result.get('id')
     if not task_id:
@@ -277,9 +327,9 @@ def generate_video():
     if 'error' in result:
         return jsonify({'error': f'Task polling failed: {result["error"]}'}), 500
     
-    status = result.get('status')
-    content = result.get('content') or {}
-    video_url = (content or {}).get('video_url') or result.get('video_url')
+    status = result.get('status') or result.get('result', {}).get('status')
+    content = result.get('content') or result.get('result', {}).get('content') or {}
+    video_url = (content or {}).get('video_url') or result.get('video_url') or result.get('result', {}).get('video_url')
     if status == 'succeeded' and video_url:
         output_filename = f"{task_id}.mp4"
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
