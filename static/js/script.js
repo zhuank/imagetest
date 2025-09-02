@@ -29,6 +29,10 @@ const resultVideo = document.getElementById('resultVideo');
 const downloadLink = document.getElementById('downloadLink');
 const toast = document.getElementById('toast');
 
+// 已上传文件的服务端信息与可用直链
+window.uploadedImageUrls = [];
+window.uploadedFileInfo = [];
+
 // 初始化
 document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
@@ -238,6 +242,11 @@ function clearAllImages() {
     startFramePreview.innerHTML = '';
     endFramePreview.innerHTML = '';
     referenceFramesPreview.innerHTML = '';
+
+    // 清理已上传缓存并禁用生成按钮
+    window.uploadedImageUrls = [];
+    window.uploadedFileInfo = [];
+    generateVideoBtn.disabled = true;
     
     updateButtonStates();
     showToast('已清空所有图片', 'info');
@@ -345,6 +354,11 @@ async function uploadImages() {
         }
 
         if (result.success && result.image_urls) {
+            // 缓存服务端返回的直链和文件信息，并启用“生成视频”按钮
+            window.uploadedImageUrls = result.image_urls;
+            window.uploadedFileInfo = result.files || [];
+            generateVideoBtn.disabled = false;
+            showToast(`上传成功，共${result.count || result.image_urls.length}张`, 'success');
             return result.image_urls;
         } else {
             throw new Error('上传响应格式错误');
@@ -365,11 +379,25 @@ async function generateVideo() {
         return;
     }
 
-    // 获取表单数据
-    const formData = {
+    // 若尚未完成服务端上传，则先自动上传
+    if (!window.uploadedImageUrls || window.uploadedImageUrls.length === 0) {
+        try {
+            progressSection.style.display = 'block';
+            resultSection.style.display = 'none';
+            updateProgress(5, '正在上传图片...');
+            await uploadImages();
+        } catch (e) {
+            showToast('上传失败，请重试', 'error');
+            return;
+        }
+    }
+
+    // 获取表单数据并组织请求体
+    const payload = {
         api_key: document.getElementById('apiKey').value.trim(),
+        // 后端当前使用固定模型名，此处仅透传
         model_name: document.getElementById('modelName').value.trim(),
-        files: window.uploadedFileInfo,
+        image_urls: window.uploadedImageUrls,
         prompt: document.getElementById('prompt').value.trim(),
         ratio: document.getElementById('ratio').value,
         duration: parseInt(document.getElementById('duration').value),
