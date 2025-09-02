@@ -94,7 +94,7 @@ def rehost_image(file_path):
     if url:
         return url
     # 尝试 0x0.st 兜底
-    url = upload_to_0x0(file_path)
+    url = upload_to_0x0(file_path) # type: ignore
     if url:
         return url
     return None
