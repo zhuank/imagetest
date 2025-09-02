@@ -398,8 +398,7 @@ async function generateVideo() {
 
     // 获取表单数据并组织请求体
     const payload = {
-        api_key: document.getElementById('apiKey').value.trim(),
-        // 后端当前使用固定模型名，此处仅透传
+        // 不再从前端收集 api_key，改由后端环境变量提供
         model_name: document.getElementById('modelName').value.trim(),
         image_urls: window.uploadedImageUrls,
         prompt: document.getElementById('prompt').value.trim(),
@@ -409,94 +408,63 @@ async function generateVideo() {
         watermark: document.getElementById('watermark').value === 'true'
     };
 
-    // 验证必填字段
-    if (!payload.api_key || !payload.model_name) {
-        showToast('请填写API Key和模型名称', 'error');
+    // 验证必填字段（只校验模型ID）
+    if (!payload.model_name) {
+        showToast('请填写模型ID', 'error');
         return;
     }
 
     try {
-        generateVideoBtn.disabled = true;
-        generateVideoBtn.textContent = '生成中...';
-        
-        // 显示进度区域
-        progressSection.style.display = 'block';
-        resultSection.style.display = 'none';
-        updateProgress(0, '正在创建视频生成任务...');
-
+        updateProgress(15, '正在创建任务...');
         const response = await fetch('/generate', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
 
         const result = await response.json();
-
-        if (result.success) {
-            currentTaskId = result.task_id;
-            showToast('视频生成任务已创建', 'success');
-            updateProgress(20, '任务已创建，开始生成视频...');
-            
-            // 开始轮询任务状态
-            startStatusPolling();
-        } else {
-            throw new Error(result.error || '任务创建失败');
+        if (!response.ok) {
+            throw new Error(result.error || '创建任务失败');
         }
+
+        currentTaskId = result.task_id;
+        updateProgress(30, '任务已创建，开始处理...');
+        startStatusCheck();
     } catch (error) {
-        console.error('Generate error:', error);
-        showToast('生成失败: ' + error.message, 'error');
-        resetGenerationState();
+        console.error('生成任务失败:', error);
+        showToast(`生成任务失败：${error.message}`, 'error');
+        progressSection.style.display = 'none';
     }
 }
 
-// 开始状态轮询
-function startStatusPolling() {
-    if (statusCheckInterval) {
-        clearInterval(statusCheckInterval);
-    }
+// 定时轮询任务状态
+async function checkStatusOnce() {
+    if (!currentTaskId) return;
+    try {
+        const response = await fetch(`/status/${currentTaskId}`); // 不再携带 api_key 查询参数
+        const data = await response.json();
 
-    let pollCount = 0;
-    const maxPolls = 60; // 最多轮询5分钟 (60 * 5秒)
-    
-    statusCheckInterval = setInterval(async () => {
-        pollCount++;
-        
-        try {
-            const response = await fetch(`/status/${currentTaskId}?api_key=${encodeURIComponent(document.getElementById('apiKey').value)}`);
-            const result = await response.json();
-
-            if (result.status === 'completed') {
-                clearInterval(statusCheckInterval);
-                updateProgress(100, '视频生成完成！');
-                showVideoResult(result.video_url);
-                showToast('视频生成成功！', 'success');
-                resetGenerationState();
-            } else if (result.error) {
-                clearInterval(statusCheckInterval);
-                showToast('生成失败: ' + result.error, 'error');
-                resetGenerationState();
+        if (response.ok) {
+            const status = data.status;
+            if (status === 'succeeded' && data.video_url) {
+                updateProgress(100, '生成完成！');
+                showResult(data.video_url);
+                stopStatusCheck();
+            } else if (status === 'failed') {
+                stopStatusCheck();
+                showToast('任务失败，请重试', 'error');
+                progressSection.style.display = 'none';
             } else {
-                // 更新进度
-                const progress = Math.min(20 + (pollCount / maxPolls) * 60, 80);
-                updateProgress(progress, result.message || '正在生成视频...');
+                // 处理中
+                updateProgress(Math.min(getCurrentProgress() + 5, 95), '任务进行中...');
             }
-        } catch (error) {
-            console.error('Status check error:', error);
-            if (pollCount >= maxPolls) {
-                clearInterval(statusCheckInterval);
-                showToast('任务超时，请重试', 'error');
-                resetGenerationState();
-            }
+        } else {
+            throw new Error(data.error || '查询状态失败');
         }
-        
-        if (pollCount >= maxPolls) {
-            clearInterval(statusCheckInterval);
-            showToast('任务超时，请重试', 'error');
-            resetGenerationState();
-        }
-    }, 5000); // 每5秒检查一次
+    } catch (error) {
+        console.error('状态查询失败:', error);
+        showToast(`状态查询失败：${error.message}`, 'error');
+    }
 }
 
 // 更新进度

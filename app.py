@@ -348,18 +348,21 @@ def generate_video():
 @app.route('/status/<task_id>')
 def check_status(task_id):
     """检查任务状态"""
-    api_key = request.args.get('api_key')
+    # 兼容前端不再传递 api_key：优先 query，其次环境变量
+    api_key = (request.args.get('api_key') or os.environ.get('ARK_API_KEY', '')).strip()
     if not api_key:
-        return jsonify({'error': 'API key required'}), 400
-    
+        return jsonify({'error': 'API key required (server is missing ARK_API_KEY)'}), 400
+
     result = poll_task_status(api_key, task_id, max_wait_time=60)  # 限制为60秒
-    
+
     if 'error' in result:
         return jsonify({'error': result['error']}), 500
-    
-    status = result.get('status')
-    content = result.get('content') or {}
-    video_url = (content or {}).get('video_url') or result.get('video_url')
+
+    # 兼容不同SDK返回结构
+    status = result.get('status') or result.get('result', {}).get('status')
+    content = result.get('content') or result.get('result', {}).get('content') or {}
+    video_url = (content or {}).get('video_url') or result.get('video_url') or result.get('result', {}).get('video_url')
+
     if status == 'succeeded' and video_url:
         output_filename = f"{task_id}.mp4"
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
@@ -371,7 +374,10 @@ def check_status(task_id):
             })
         else:
             return jsonify({'error': 'Failed to download video'}), 500
-    
+
+    if status == 'failed':
+        return jsonify({'status': 'failed', 'message': 'Task failed'}), 200
+
     return jsonify({
         'status': status or 'unknown',
         'message': 'Task is still processing'
