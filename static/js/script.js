@@ -425,7 +425,7 @@ async function generateVideo() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(formData)
+            body: JSON.stringify(payload)
         });
 
         const result = await response.json();
