@@ -305,8 +305,8 @@ def generate_video():
         'watermark': data.get('watermark', False)
     }
     
-    # 使用前端传入模型或默认 Seedance I2V 模型ID
-    model_name = data.get('model_name') or "seedance-1-0-lite-i2v-250428"
+    # 使用前端传入模型或默认 Seedance 模型ID（支持环境变量覆盖）
+    model_name = data.get('model_name') or os.environ.get('ARK_DEFAULT_MODEL') or "seedance-1-0-lite-t2v-250428"
     
     # 创建视频生成任务（SDK）
     task_result = create_video_task(api_key, model_name, image_urls, **video_params)
