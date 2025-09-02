@@ -397,6 +397,15 @@ async function generateVideo() {
     }
 
     // 获取表单数据并组织请求体
+    const seedInput = document.getElementById('seed');
+    const temperatureInput = document.getElementById('temperature');
+    let seedVal = parseInt(seedInput ? seedInput.value : '-1', 10);
+    if (isNaN(seedVal)) seedVal = -1; // 非法则使用 -1（随机）
+
+    let temperatureVal = parseFloat(temperatureInput ? temperatureInput.value : '0.7');
+    if (isNaN(temperatureVal)) temperatureVal = 0.7;
+    temperatureVal = Math.min(1, Math.max(0, temperatureVal));
+
     const payload = {
         // 不再从前端收集 api_key，改由后端环境变量提供
         model_name: document.getElementById('modelName').value.trim(),
@@ -405,7 +414,9 @@ async function generateVideo() {
         ratio: document.getElementById('ratio').value,
         duration: parseInt(document.getElementById('duration').value),
         fps: parseInt(document.getElementById('fps').value),
-        watermark: document.getElementById('watermark').value === 'true'
+        watermark: document.getElementById('watermark').value === 'true',
+        seed: seedVal,
+        temperature: temperatureVal
     };
 
     // 验证必填字段（只校验模型ID）
@@ -448,7 +459,12 @@ async function checkStatusOnce() {
             const status = data.status;
             if (status === 'succeeded' && data.video_url) {
                 updateProgress(100, '生成完成！');
+                // video_url 可能是本地代理地址，remote_url 为远端直链（可选）
                 showVideoResult(data.video_url);
+                if (data.remote_url) {
+                    // 作为兜底：如果用户下载失败，可在控制台复制远端链接
+                    console.debug('Remote video URL:', data.remote_url);
+                }
                 stopStatusCheck();
             } else if (status === 'failed') {
                 stopStatusCheck();

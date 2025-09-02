@@ -122,6 +122,14 @@ def create_video_task(api_key, model_name, image_urls, **kwargs):
                 create_result = client.content_generation.tasks.create(
                     model=model_id,
                     content=content,
+                    parameters={
+                        "ratio": kwargs.get('ratio', '1092x1080'),
+                        "duration": int(kwargs.get('duration', 5)),
+                        "fps": int(kwargs.get('fps', 24)),
+                        "watermark": bool(kwargs.get('watermark', False)),
+                        "seed": int(kwargs.get('seed', -1)),
+                        "temperature": float(kwargs.get('temperature', 0.7)),
+                    },
                 )
                 task_id = None
                 if isinstance(create_result, dict):
@@ -303,13 +311,31 @@ def generate_video():
     if not image_urls or len(image_urls) == 0:
         return jsonify({'error': 'No image URLs provided'}), 400
     
-    # 构建视频生成参数
+    # 构建视频生成参数（含 seed / temperature）
+    # seed：-1 表示随机；0 或正整数表示固定种子
+    try:
+        seed_val = int(data.get('seed', -1))
+    except Exception:
+        seed_val = -1
+    if seed_val < -1:
+        seed_val = -1
+    try:
+        temperature_val = float(data.get('temperature', 0.7))
+    except Exception:
+        temperature_val = 0.7
+    if temperature_val < 0:
+        temperature_val = 0.0
+    if temperature_val > 1:
+        temperature_val = 1.0
+
     video_params = {
         'prompt': data.get('prompt', 'Generate a video based on the provided images'),
         'ratio': data.get('ratio', '1092x1080'),
         'duration': int(data.get('duration', 5)),
         'fps': int(data.get('fps', 24)),
-        'watermark': data.get('watermark', False)
+        'watermark': data.get('watermark', False),
+        'seed': seed_val,
+        'temperature': temperature_val,
     }
     
     # 使用前端传入模型或默认 Seedance 模型ID（支持环境变量覆盖）
@@ -331,8 +357,9 @@ def generate_video():
     # 轮询任务状态直到完成（SDK）
     result = poll_task_status(api_key, task_id, max_wait_time=300)
     
-    if 'error' in result:
-        return jsonify({'error': f'Task polling failed: {result["error"]}'}), 500
+    # 注意：部分 SDK/服务返回体可能包含 error: null（或 None），不能仅以存在键名判断为错误
+    if isinstance(result, dict) and result.get('error'):
+        return jsonify({'error': f'Task polling failed: {result.get("error")}'}), 500
     
     status = result.get('status') or result.get('result', {}).get('status')
     content = result.get('content') or result.get('result', {}).get('content') or {}
@@ -362,25 +389,37 @@ def check_status(task_id):
 
     result = poll_task_status(api_key, task_id, max_wait_time=60)  # 限制为60秒
 
-    if 'error' in result:
-        return jsonify({'error': result['error']}), 500
+    # 注意：同上，避免把 error: null 误判为错误
+    if isinstance(result, dict) and result.get('error'):
+        return jsonify({'error': result.get('error')}), 500
 
     # 兼容不同SDK返回结构
     status = result.get('status') or result.get('result', {}).get('status')
     content = result.get('content') or result.get('result', {}).get('content') or {}
     video_url = (content or {}).get('video_url') or result.get('video_url') or result.get('result', {}).get('video_url')
 
+    # 若成功，直接返回 200 和视频URL；若失败，返回 200 并给出状态由前端决定文案
     if status == 'succeeded' and video_url:
+        # 优先返回本地代理下载地址，避免跨域或直链被浏览器拦截
         output_filename = f"{task_id}.mp4"
         output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
-        if download_video(video_url, output_path):
-            return jsonify({
-                'status': 'succeeded',
-                'video_url': url_for('download_video_file', filename=output_filename, _external=True),
-                'local_path': output_path
-            })
+        local_url = url_for('download_video_file', filename=output_filename, _external=True)
+        try:
+            if not (os.path.exists(output_path) and os.path.getsize(output_path) > 0):
+                # 若文件不存在或为空，则尝试拉取一次
+                download_video(video_url, output_path)
+        except Exception:
+            pass
+        # 若已成功落地，则返回本地URL；否则继续返回远端URL作兜底
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            return jsonify({'status': 'succeeded', 'video_url': local_url, 'remote_url': video_url})
         else:
-            return jsonify({'error': 'Failed to download video'}), 500
+            return jsonify({'status': 'succeeded', 'video_url': video_url})
+    elif status == 'failed':
+        return jsonify({'status': 'failed', 'error': 'Task failed'})
+    else:
+        # 处理中或未知
+        return jsonify({'status': status or 'processing'})
 
     if status == 'failed':
         return jsonify({'status': 'failed', 'message': 'Task failed'}), 200

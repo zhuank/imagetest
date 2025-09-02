@@ -20,10 +20,21 @@
                     <!-- 已移除 API Key 输入框 -->
                     
                     <div class="form-group">
-                        <label for="modelName">模型ID:</label>
+                        <label for="modelName">模型 ID</label>
                         <input type="text" id="modelName" name="modelName" value="seedance-1-0-lite-t2v-250428" required>
                     </div>
                     
+                    <div class="form-group">
+                        <label for="seed">Seed（随机种子）</label>
+                        <input type="number" id="seed" name="seed" value="-1" min="-1" step="1" placeholder="-1 表示随机；0 或正整数表示固定种子">
+                        <small class="hint">-1 表示随机；0 或任意正整数将固定生成结果的随机性</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="temperature">Temperature（温度）</label>
+                        <input type="number" id="temperature" name="temperature" value="0.7" min="0" max="1" step="0.05" placeholder="0~1，数值越大随机性越强">
+                        <small class="hint">范围 0~1，越大越有创造性，越小越稳定</small>
+                    </div>
                     <div class="form-group">
                         <label for="prompt">提示词:</label>
                         <textarea id="prompt" name="prompt" rows="3" placeholder="描述您想要生成的视频内容...">Generate a video based on the provided images</textarea>
