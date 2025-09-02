@@ -448,7 +448,7 @@ async function checkStatusOnce() {
             const status = data.status;
             if (status === 'succeeded' && data.video_url) {
                 updateProgress(100, '生成完成！');
-                showResult(data.video_url);
+                showVideoResult(data.video_url);
                 stopStatusCheck();
             } else if (status === 'failed') {
                 stopStatusCheck();
@@ -545,3 +545,27 @@ window.addEventListener('beforeunload', function() {
         clearInterval(statusCheckInterval);
     }
 });
+
+// 新增：启动/停止状态轮询与读取当前进度
+function startStatusCheck() {
+    if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+        statusCheckInterval = null;
+    }
+    // 立即查询一次，然后每3秒轮询
+    checkStatusOnce();
+    statusCheckInterval = setInterval(checkStatusOnce, 3000);
+}
+
+function stopStatusCheck() {
+    if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+        statusCheckInterval = null;
+    }
+}
+
+function getCurrentProgress() {
+    const width = progressFill.style.width || '0%';
+    const n = parseInt(width, 10);
+    return isNaN(n) ? 0 : n;
+}

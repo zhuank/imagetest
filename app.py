@@ -9,6 +9,13 @@ import uuid
 from urllib.parse import urlparse
 from volcenginesdkarkruntime import Ark
 
+# 新增：加载 .env 环境变量
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=False)
+except Exception:
+    pass
+
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['UPLOAD_FOLDER'] = 'uploads'
