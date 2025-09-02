@@ -321,7 +321,7 @@ def check_status(task_id):
             if download_video(video_url, output_path):
                 return jsonify({
                     'status': 'completed',
-                    'video_url': url_for('download_video', filename=output_filename),
+                    'video_url': url_for('download_video_file', filename=output_filename, _external=True),
                     'local_path': output_path
                 })
             else:

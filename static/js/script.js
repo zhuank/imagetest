@@ -277,6 +277,10 @@ function updateButtonStates() {
     
     clearImagesBtn.disabled = !hasAnyImages;
     uploadImagesBtn.disabled = !hasAnyImages;
+
+    // 只要选择了图片或已有已上传直链，就允许生成
+    const hasUploaded = window.uploadedImageUrls && window.uploadedImageUrls.length > 0;
+    generateVideoBtn.disabled = !(hasAnyImages || hasUploaded);
     
     // 更新各个上传区域的显示状态
     updateUploadAreaDisplay('start', hasStartFrame);
