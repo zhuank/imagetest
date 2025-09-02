@@ -410,7 +410,7 @@ async function generateVideo() {
     };
 
     // 验证必填字段
-    if (!formData.api_key || !formData.model_name) {
+    if (!payload.api_key || !payload.model_name) {
         showToast('请填写API Key和模型名称', 'error');
         return;
     }
