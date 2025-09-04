@@ -202,7 +202,7 @@ async function uploadImages(mode) {
         for (let i = 1; i <= 4; i++) {
             const refImage = uploadedImages.reference[`ref${i}`];
             if (refImage) {
-                formData.append('reference_frames', refImage);
+                formData.append('reference_images', refImage);
                 hasImages = true;
             }
         }
