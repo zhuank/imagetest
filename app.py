@@ -448,7 +448,16 @@ def get_task_status(task_id):
         result = poll_task_status(api_key, task_id, max_wait_time=1)
         
         if isinstance(result, dict) and result.get('error'):
-            return jsonify({'status': 'failed', 'error': result.get('error')})
+            error_msg = result.get('error', '')
+            # 处理方舟SDK的误导性错误信息
+            if 'API key doesn\'t exist' in error_msg or 'AuthenticationError' in error_msg:
+                # 这通常表示任务ID不存在，而不是API key问题
+                return jsonify({
+                    'status': 'failed', 
+                    'error': f'Task not found: {task_id}. Please check if the task ID is correct.',
+                    'progress': 0
+                })
+            return jsonify({'status': 'failed', 'error': error_msg, 'progress': 0})
         
         # 兼容不同SDK返回结构
         status = result.get('status') or result.get('result', {}).get('status')
@@ -479,7 +488,15 @@ def get_task_status(task_id):
             return jsonify({'status': 'processing', 'progress': progress})
             
     except Exception as e:
-        return jsonify({'status': 'failed', 'error': str(e), 'progress': 0})
+        error_msg = str(e)
+        # 处理方舟SDK的误导性错误信息
+        if 'API key doesn\'t exist' in error_msg or 'AuthenticationError' in error_msg:
+            return jsonify({
+                'status': 'failed', 
+                'error': f'Task not found: {task_id}. Please check if the task ID is correct.',
+                'progress': 0
+            })
+        return jsonify({'status': 'failed', 'error': error_msg, 'progress': 0})
 
 @app.route('/upload_firstlast', methods=['POST'])
 def upload_firstlast_files():
@@ -487,13 +504,17 @@ def upload_firstlast_files():
     uploaded_files = []
     image_urls = []
     
+    # 确保firstlast子文件夹存在
+    firstlast_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'firstlast')
+    os.makedirs(firstlast_folder, exist_ok=True)
+    
     # 处理首帧（必需）
     if 'first_frame' in request.files:
         first_file = request.files['first_frame']
         if first_file and first_file.filename and allowed_file(first_file.filename):
             filename = secure_filename(first_file.filename)
             filename = f"first_{uuid.uuid4().hex}_{filename}"
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file_path = os.path.join(firstlast_folder, filename)
             first_file.save(file_path)
             
             # 重新托管图片获取直接链接
@@ -513,7 +534,7 @@ def upload_firstlast_files():
         if last_file and last_file.filename and allowed_file(last_file.filename):
             filename = secure_filename(last_file.filename)
             filename = f"last_{uuid.uuid4().hex}_{filename}"
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file_path = os.path.join(firstlast_folder, filename)
             last_file.save(file_path)
             
             # 重新托管图片获取直接链接
@@ -543,6 +564,10 @@ def upload_reference_files():
     uploaded_files = []
     image_urls = []
     
+    # 确保reference子文件夹存在
+    reference_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'reference')
+    os.makedirs(reference_folder, exist_ok=True)
+    
     # 处理参考图（1-4张）
     if 'reference_images' in request.files:
         reference_files = request.files.getlist('reference_images')
@@ -550,7 +575,7 @@ def upload_reference_files():
             if ref_file and ref_file.filename and allowed_file(ref_file.filename):
                 filename = secure_filename(ref_file.filename)
                 filename = f"ref_{i}_{uuid.uuid4().hex}_{filename}"
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file_path = os.path.join(reference_folder, filename)
                 ref_file.save(file_path)
                 
                 # 重新托管图片获取直接链接
@@ -584,18 +609,20 @@ def generate_firstlast_video():
     first_frame_files = []
     last_frame_files = []
     
-    for filename in os.listdir(app.config['UPLOAD_FOLDER']):
-        if filename.startswith('first_') and allowed_file(filename):
-            first_frame_files.append(filename)
-        elif filename.startswith('last_') and allowed_file(filename):
-            last_frame_files.append(filename)
+    firstlast_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'firstlast')
+    if os.path.exists(firstlast_folder):
+        for filename in os.listdir(firstlast_folder):
+            if filename.startswith('first_') and allowed_file(filename):
+                first_frame_files.append(filename)
+            elif filename.startswith('last_') and allowed_file(filename):
+                last_frame_files.append(filename)
     
     # 处理首帧（必需）
     image_urls = []
     if first_frame_files:
         # 取最新的首帧文件
         latest_first = sorted(first_frame_files)[-1]
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], latest_first)
+        file_path = os.path.join(firstlast_folder, latest_first)
         rehosted_url = rehost_image(file_path)
         if rehosted_url:
             image_urls.append(rehosted_url)
@@ -604,7 +631,7 @@ def generate_firstlast_video():
     if last_frame_files:
         # 取最新的尾帧文件
         latest_last = sorted(last_frame_files)[-1]
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], latest_last)
+        file_path = os.path.join(firstlast_folder, latest_last)
         rehosted_url = rehost_image(file_path)
         if rehosted_url:
             image_urls.append(rehosted_url)
@@ -670,9 +697,11 @@ def generate_reference_video():
     """生成参考图视频"""
     # 检查是否有已上传的参考图
     reference_image_files = []
-    for filename in os.listdir(app.config['UPLOAD_FOLDER']):
-        if filename.startswith('ref_') and allowed_file(filename):
-            reference_image_files.append(filename)
+    reference_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'reference')
+    if os.path.exists(reference_folder):
+        for filename in os.listdir(reference_folder):
+            if filename.startswith('ref_') and allowed_file(filename):
+                reference_image_files.append(filename)
     
     if not reference_image_files:
         return jsonify({'error': 'No valid reference images found. Please upload images first.'}), 400
@@ -680,7 +709,7 @@ def generate_reference_video():
     # 重新托管最新的参考图
     image_urls = []
     for filename in sorted(reference_image_files)[-4:]:  # 取最新的4张图
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file_path = os.path.join(reference_folder, filename)
         rehosted_url = rehost_image(file_path)
         if rehosted_url:
             image_urls.append(rehosted_url)
