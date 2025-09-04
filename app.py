@@ -102,10 +102,26 @@ def rehost_image(file_path):
 def create_video_task(api_key, model_name, image_urls, **kwargs):
     """使用方舟SDK创建参考图生视频任务，返回 {"id": task_id} 或 {"error": ...} """
     try:
+        # 构建包含视频参数的prompt
+        base_prompt = kwargs.get('prompt', 'Generate a video based on the provided images')
+        ratio = kwargs.get('ratio', '1092x1080')
+        duration = int(kwargs.get('duration', 5))
+        fps = int(kwargs.get('fps', 24))
+        watermark = 'false' if not kwargs.get('watermark', False) else 'true'
+        seed = int(kwargs.get('seed', -1))
+        temperature = float(kwargs.get('temperature', 0.7))
+        
+        # 按照方舟API格式添加参数到prompt
+        full_prompt = f"{base_prompt} --ratio {ratio} --dur {duration} --fps {fps} --wm {watermark}"
+        if seed != -1:
+            full_prompt += f" --seed {seed}"
+        if temperature != 0.7:
+            full_prompt += f" --temperature {temperature}"
+        
         content = [
             {
                 "type": "text",
-                "text": kwargs.get('prompt', 'Generate a video based on the provided images')
+                "text": full_prompt
             }
         ]
         for url in image_urls:
@@ -122,14 +138,6 @@ def create_video_task(api_key, model_name, image_urls, **kwargs):
                 create_result = client.content_generation.tasks.create(
                     model=model_id,
                     content=content,
-                    parameters={
-                        "ratio": kwargs.get('ratio', '1092x1080'),
-                        "duration": int(kwargs.get('duration', 5)),
-                        "fps": int(kwargs.get('fps', 24)),
-                        "watermark": bool(kwargs.get('watermark', False)),
-                        "seed": int(kwargs.get('seed', -1)),
-                        "temperature": float(kwargs.get('temperature', 0.7)),
-                    },
                 )
                 task_id = None
                 if isinstance(create_result, dict):
@@ -427,6 +435,265 @@ def check_status(task_id):
     return jsonify({
         'status': status or 'unknown',
         'message': 'Task is still processing'
+    })
+
+@app.route('/upload_firstlast', methods=['POST'])
+def upload_firstlast_files():
+    """处理首尾帧上传"""
+    uploaded_files = []
+    image_urls = []
+    
+    # 处理首帧（必需）
+    if 'first_frame' in request.files:
+        first_file = request.files['first_frame']
+        if first_file and first_file.filename and allowed_file(first_file.filename):
+            filename = secure_filename(first_file.filename)
+            filename = f"first_{uuid.uuid4().hex}_{filename}"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            first_file.save(file_path)
+            
+            # 重新托管图片获取直接链接
+            rehosted_url = rehost_image(file_path)
+            if rehosted_url:
+                image_urls.append(rehosted_url)
+                uploaded_files.append({
+                    'type': 'first_frame',
+                    'filename': filename,
+                    'path': file_path,
+                    'url': rehosted_url
+                })
+    
+    # 处理尾帧（可选）
+    if 'last_frame' in request.files:
+        last_file = request.files['last_frame']
+        if last_file and last_file.filename and allowed_file(last_file.filename):
+            filename = secure_filename(last_file.filename)
+            filename = f"last_{uuid.uuid4().hex}_{filename}"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            last_file.save(file_path)
+            
+            # 重新托管图片获取直接链接
+            rehosted_url = rehost_image(file_path)
+            if rehosted_url:
+                image_urls.append(rehosted_url)
+                uploaded_files.append({
+                    'type': 'last_frame',
+                    'filename': filename,
+                    'path': file_path,
+                    'url': rehosted_url
+                })
+    
+    if not uploaded_files:
+        return jsonify({'error': 'No valid images uploaded'}), 400
+    
+    return jsonify({
+        'success': True,
+        'files': uploaded_files,
+        'image_urls': image_urls,
+        'count': len(uploaded_files)
+    })
+
+@app.route('/upload_reference', methods=['POST'])
+def upload_reference_files():
+    """处理参考图上传"""
+    uploaded_files = []
+    image_urls = []
+    
+    # 处理参考图（1-4张）
+    if 'reference_images' in request.files:
+        reference_files = request.files.getlist('reference_images')
+        for i, ref_file in enumerate(reference_files):
+            if ref_file and ref_file.filename and allowed_file(ref_file.filename):
+                filename = secure_filename(ref_file.filename)
+                filename = f"ref_{i}_{uuid.uuid4().hex}_{filename}"
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                ref_file.save(file_path)
+                
+                # 重新托管图片获取直接链接
+                rehosted_url = rehost_image(file_path)
+                if rehosted_url:
+                    image_urls.append(rehosted_url)
+                    uploaded_files.append({
+                        'type': 'reference_image',
+                        'filename': filename,
+                        'path': file_path,
+                        'url': rehosted_url
+                    })
+    
+    if not uploaded_files:
+        return jsonify({'error': 'No valid reference images uploaded'}), 400
+    
+    if len(uploaded_files) > 4:
+        return jsonify({'error': 'Maximum 4 reference images allowed'}), 400
+    
+    return jsonify({
+        'success': True,
+        'files': uploaded_files,
+        'image_urls': image_urls,
+        'count': len(uploaded_files)
+    })
+
+@app.route('/generate_firstlast', methods=['POST'])
+def generate_firstlast_video():
+    """生成首尾帧视频"""
+    # 处理文件上传和参数
+    uploaded_files = []
+    image_urls = []
+    
+    # 处理首帧（必需）
+    if 'first_frame' in request.files:
+        first_file = request.files['first_frame']
+        if first_file and first_file.filename and allowed_file(first_file.filename):
+            filename = secure_filename(first_file.filename)
+            filename = f"first_{uuid.uuid4().hex}_{filename}"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            first_file.save(file_path)
+            
+            rehosted_url = rehost_image(file_path)
+            if rehosted_url:
+                image_urls.append(rehosted_url)
+    
+    # 处理尾帧（可选）
+    if 'last_frame' in request.files:
+        last_file = request.files['last_frame']
+        if last_file and last_file.filename and allowed_file(last_file.filename):
+            filename = secure_filename(last_file.filename)
+            filename = f"last_{uuid.uuid4().hex}_{filename}"
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            last_file.save(file_path)
+            
+            rehosted_url = rehost_image(file_path)
+            if rehosted_url:
+                image_urls.append(rehosted_url)
+    
+    if not image_urls:
+        return jsonify({'error': 'No valid images provided'}), 400
+    
+    # 获取API Key
+    api_key = os.environ.get('ARK_API_KEY', '').strip()
+    if not api_key:
+        return jsonify({'error': 'API key required'}), 400
+    
+    # 构建视频生成参数
+    try:
+        seed_val = int(request.form.get('seed', -1))
+    except Exception:
+        seed_val = -1
+    if seed_val < -1:
+        seed_val = -1
+        
+    try:
+        temperature_val = float(request.form.get('temperature', 0.7))
+    except Exception:
+        temperature_val = 0.7
+    if temperature_val < 0:
+        temperature_val = 0.0
+    if temperature_val > 1:
+        temperature_val = 1.0
+    
+    video_params = {
+        'prompt': request.form.get('prompt', 'Generate a video from first frame to last frame'),
+        'ratio': request.form.get('ratio', '1092x1080'),
+        'duration': int(request.form.get('duration', 5)),
+        'fps': int(request.form.get('fps', 24)),
+        'watermark': request.form.get('watermark') == 'true',
+        'seed': seed_val,
+        'temperature': temperature_val,
+    }
+    
+    model_name = request.form.get('model_name') or "seedance-1-0-lite-i2v-250428"
+    
+    # 创建视频生成任务
+    task_result = create_video_task(api_key, model_name, image_urls, **video_params)
+    
+    if 'error' in task_result:
+        return jsonify({'error': f'Task creation failed: {task_result["error"]}'}), 500
+    
+    task_id = task_result.get('id')
+    if not task_id:
+        return jsonify({'error': 'No task ID returned'}), 500
+    
+    return jsonify({
+        'success': True,
+        'task_id': task_id,
+        'message': 'First-last frame video generation started'
+    })
+
+@app.route('/generate_reference', methods=['POST'])
+def generate_reference_video():
+    """生成参考图视频"""
+    # 处理文件上传和参数
+    uploaded_files = []
+    image_urls = []
+    
+    # 处理参考图（1-4张）
+    if 'reference_images' in request.files:
+        reference_files = request.files.getlist('reference_images')
+        for i, ref_file in enumerate(reference_files):
+            if ref_file and ref_file.filename and allowed_file(ref_file.filename):
+                filename = secure_filename(ref_file.filename)
+                filename = f"ref_{i}_{uuid.uuid4().hex}_{filename}"
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                ref_file.save(file_path)
+                
+                rehosted_url = rehost_image(file_path)
+                if rehosted_url:
+                    image_urls.append(rehosted_url)
+    
+    if not image_urls:
+        return jsonify({'error': 'No valid reference images provided'}), 400
+    
+    if len(image_urls) > 4:
+        return jsonify({'error': 'Maximum 4 reference images allowed'}), 400
+    
+    # 获取API Key
+    api_key = os.environ.get('ARK_API_KEY', '').strip()
+    if not api_key:
+        return jsonify({'error': 'API key required'}), 400
+    
+    # 构建视频生成参数
+    try:
+        seed_val = int(request.form.get('seed', -1))
+    except Exception:
+        seed_val = -1
+    if seed_val < -1:
+        seed_val = -1
+        
+    try:
+        temperature_val = float(request.form.get('temperature', 0.7))
+    except Exception:
+        temperature_val = 0.7
+    if temperature_val < 0:
+        temperature_val = 0.0
+    if temperature_val > 1:
+        temperature_val = 1.0
+    
+    video_params = {
+        'prompt': request.form.get('prompt', 'Generate a video based on the provided reference images'),
+        'ratio': request.form.get('ratio', '1092x1080'),
+        'duration': int(request.form.get('duration', 5)),
+        'fps': int(request.form.get('fps', 24)),
+        'watermark': request.form.get('watermark') == 'true',
+        'seed': seed_val,
+        'temperature': temperature_val,
+    }
+    
+    model_name = request.form.get('model_name') or "seedance-1-0-lite-i2v-250428"
+    
+    # 创建视频生成任务
+    task_result = create_video_task(api_key, model_name, image_urls, **video_params)
+    
+    if 'error' in task_result:
+        return jsonify({'error': f'Task creation failed: {task_result["error"]}'}), 500
+    
+    task_id = task_result.get('id')
+    if not task_id:
+        return jsonify({'error': 'No task ID returned'}), 500
+    
+    return jsonify({
+        'success': True,
+        'task_id': task_id,
+        'message': 'Reference image video generation started'
     })
 
 @app.route('/download/<filename>')
