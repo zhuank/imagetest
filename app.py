@@ -3,9 +3,11 @@ import tempfile
 import requests
 import time
 import json
+import subprocess
 from flask import Flask, render_template, request, jsonify, send_file, url_for
 from werkzeug.utils import secure_filename
 import uuid
+import glob
 from urllib.parse import urlparse
 from volcenginesdkarkruntime import Ark
 
@@ -25,8 +27,15 @@ app.config['OUTPUT_FOLDER'] = 'outputs'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 
+# 视频合并任务文件夹
+app.config['MERGE_TASKS_FOLDER'] = 'merge_tasks'
+os.makedirs(app.config['MERGE_TASKS_FOLDER'], exist_ok=True)
+
 # 允许的文件扩展名
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
+
+# 允许的视频文件扩展名
+ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'webm', 'mov', 'avi'}
 
 # 新增：支持的分辨率与归一化
 ALLOWED_RESOLUTIONS = {"854x480", "1280x720", "1920x1080"}
@@ -775,8 +784,8 @@ def generate_firstlast_video():
         'message': 'First-last frame video generation started'
     })
 
-@app.route('/generate_reference', methods=['POST'])
-def generate_reference_video():
+# duplicate removed: legacy generate_reference route disabled
+def _generate_reference_video_legacy_removed_1():
     """生成参考图视频"""
     # 检查是否有已上传的参考图
     reference_image_files = []
@@ -922,11 +931,11 @@ def _generate_firstlast_video_legacy_removed():
     return jsonify({
         'success': True,
         'task_id': task_id,
-        'message': 'First-last frame video generation started'
+        'message': 'Reference image video generation started'
     })
 
-@app.route('/generate_reference', methods=['POST'])
-def generate_reference_video():
+# duplicate removed: legacy generate_reference route disabled
+def _generate_reference_video_legacy_removed_2():
     """生成参考图视频"""
     # 检查是否有已上传的参考图
     reference_image_files = []
@@ -977,8 +986,8 @@ def generate_reference_video():
         'count': len(image_urls)
     })
 
-@app.route('/generate_firstlast', methods=['POST'])
-def generate_firstlast_video():
+# duplicate removed: legacy generate_firstlast route disabled
+def _generate_firstlast_video_legacy_removed_2():
     """生成首尾帧视频"""
     # 检查是否有已上传的首尾帧图片
     first_frame_files = []
@@ -1194,6 +1203,202 @@ def check_firstlast_files():
         'has_last_frame': has_last_frame
     })
 
+@app.route('/list_videos', methods=['GET'])
+def list_videos():
+    """列出可用于合并的视频文件"""
+    try:
+        videos = []
+        # 检查输出文件夹中的视频文件
+        for file in os.listdir(app.config['OUTPUT_FOLDER']):
+            if file.endswith(tuple(ALLOWED_VIDEO_EXTENSIONS)):
+                file_path = os.path.join(app.config['OUTPUT_FOLDER'], file)
+                video_id = file.split('.')[0]  # 使用文件名作为ID
+                videos.append({
+                    'id': video_id,
+                    'name': file,
+                    'url': url_for('stream_video_file', filename=file),
+                    'download_url': url_for('download_file', filename=file)
+                })
+        return jsonify({
+            'success': True,
+            'videos': videos
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/merge_videos', methods=['POST'])
+def merge_videos():
+    """创建视频合并任务"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'success': False, 'error': 'No data provided'}), 400
+        
+        video_ids = data.get('video_ids', [])
+        if not video_ids or len(video_ids) < 2:
+            return jsonify({'success': False, 'error': 'At least 2 videos required'}), 400
+        
+        # 创建任务ID和任务文件夹
+        task_id = str(uuid.uuid4())
+        task_folder = os.path.join(app.config['MERGE_TASKS_FOLDER'], task_id)
+        os.makedirs(task_folder, exist_ok=True)
+        
+        # 保存任务信息
+        task_info = {
+            'task_id': task_id,
+            'video_ids': video_ids,
+            'output_name': data.get('output_name', 'merged_video'),
+            'output_format': data.get('output_format', 'mp4'),
+            'status': 'pending',
+            'created_at': time.time(),
+            'progress': 0
+        }
+        
+        with open(os.path.join(task_folder, 'task_info.json'), 'w') as f:
+            json.dump(task_info, f)
+        
+        # 启动异步任务处理
+        # 在实际生产环境中，应该使用Celery等任务队列
+        # 这里为了简单，直接在后台线程中处理
+        import threading
+        thread = threading.Thread(target=process_merge_task, args=(task_id,))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': 'Video merge task created'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+def process_merge_task(task_id):
+    """处理视频合并任务"""
+    task_folder = os.path.join(app.config['MERGE_TASKS_FOLDER'], task_id)
+    
+    try:
+        # 读取任务信息
+        with open(os.path.join(task_folder, 'task_info.json'), 'r') as f:
+            task_info = json.load(f)
+        
+        # 更新状态为处理中
+        task_info['status'] = 'processing'
+        task_info['progress'] = 10
+        with open(os.path.join(task_folder, 'task_info.json'), 'w') as f:
+            json.dump(task_info, f)
+        
+        # 准备视频文件列表
+        video_files = []
+        for video_id in task_info['video_ids']:
+            # 查找匹配的视频文件
+            matching_files = glob.glob(os.path.join(app.config['OUTPUT_FOLDER'], f"{video_id}.*"))
+            if matching_files:
+                video_files.append(matching_files[0])
+        
+        if not video_files or len(video_files) < 2:
+            raise Exception("Could not find enough video files")
+        
+        # 创建文件列表文件
+        file_list_path = os.path.join(task_folder, 'file_list.txt')
+        with open(file_list_path, 'w') as f:
+            for video_file in video_files:
+                f.write(f"file '{os.path.abspath(video_file)}'\n")
+        
+        # 设置输出文件路径
+        output_name = task_info['output_name']
+        output_format = task_info['output_format']
+        output_filename = f"{output_name}.{output_format}"
+        output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
+        
+        # 更新进度
+        task_info['progress'] = 30
+        with open(os.path.join(task_folder, 'task_info.json'), 'w') as f:
+            json.dump(task_info, f)
+        
+        # 使用FFmpeg合并视频
+        cmd = [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', file_list_path,
+            '-c', 'copy',
+            '-y',  # 覆盖已存在的文件
+            output_path
+        ]
+        
+        # 执行命令
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        
+        if process.returncode != 0:
+            raise Exception(f"FFmpeg error: {stderr.decode('utf-8', errors='ignore')}")
+        
+        # 更新任务状态为完成
+        task_info['status'] = 'completed'
+        task_info['progress'] = 100
+        task_info['output_file'] = output_filename
+        task_info['video_url'] = url_for('stream_video_file', filename=output_filename, _external=True)
+        task_info['download_url'] = url_for('download_file', filename=output_filename, _external=True)
+        task_info['completed_at'] = time.time()
+        
+        with open(os.path.join(task_folder, 'task_info.json'), 'w') as f:
+            json.dump(task_info, f)
+            
+    except Exception as e:
+        # 更新任务状态为失败
+        try:
+            with open(os.path.join(task_folder, 'task_info.json'), 'r') as f:
+                task_info = json.load(f)
+            
+            task_info['status'] = 'failed'
+            task_info['error'] = str(e)
+            
+            with open(os.path.join(task_folder, 'task_info.json'), 'w') as f:
+                json.dump(task_info, f)
+        except:
+            pass
+
+@app.route('/merge_status/<task_id>', methods=['GET'])
+def merge_status(task_id):
+    """获取视频合并任务状态"""
+    task_folder = os.path.join(app.config['MERGE_TASKS_FOLDER'], task_id)
+    
+    if not os.path.exists(task_folder):
+        return jsonify({
+            'success': False,
+            'error': 'Task not found'
+        }), 404
+    
+    try:
+        with open(os.path.join(task_folder, 'task_info.json'), 'r') as f:
+            task_info = json.load(f)
+        
+        response = {
+            'success': True,
+            'task_id': task_id,
+            'status': task_info['status'],
+            'progress': task_info['progress']
+        }
+        
+        if task_info['status'] == 'completed':
+            response['video_url'] = task_info['video_url']
+            response['download_url'] = task_info['download_url']
+        elif task_info['status'] == 'failed':
+            response['error'] = task_info.get('error', 'Unknown error')
+        
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 @app.route('/check_reference_files', methods=['GET'])
 def check_reference_files():
     """检查是否有已上传的参考图文件"""
@@ -1206,8 +1411,154 @@ def check_reference_files():
                 reference_count += 1
     
     return jsonify({
-        'success': True,
-        'reference_count': reference_count
+        'count': reference_count
+    })
+
+@app.route('/list_merge_videos', methods=['GET'])
+def list_merge_videos():
+    """列出可用于合并的视频文件"""
+    videos = []
+    
+    # 检查生成的视频文件夹
+    video_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'videos')
+    if os.path.exists(video_folder):
+        for filename in os.listdir(video_folder):
+            if filename.lower().endswith(tuple(ALLOWED_VIDEO_EXTENSIONS)):
+                file_path = os.path.join(video_folder, filename)
+                videos.append({
+                    'name': filename,
+                    'path': file_path,
+                    'url': url_for('stream', filename=f'videos/{filename}'),
+                    'size': os.path.getsize(file_path),
+                    'created': os.path.getctime(file_path)
+                })
+    
+    # 按创建时间排序，最新的在前面
+    videos.sort(key=lambda x: x['created'], reverse=True)
+    
+    return jsonify({
+        'videos': videos
+    })
+
+@app.route('/merge_videos_task', methods=['POST'])
+def merge_videos_task():
+    """创建视频合并任务"""
+    if not request.json or 'videos' not in request.json:
+        return jsonify({'error': '没有提供视频列表'}), 400
+    
+    videos = request.json['videos']
+    if not videos or len(videos) < 2:
+        return jsonify({'error': '至少需要两个视频才能合并'}), 400
+    
+    # 创建任务ID和任务文件夹
+    task_id = str(uuid.uuid4())
+    task_folder = os.path.join(MERGE_TASKS_FOLDER, task_id)
+    os.makedirs(task_folder, exist_ok=True)
+    
+    # 保存视频列表到任务文件
+    task_file = os.path.join(task_folder, 'task.json')
+    with open(task_file, 'w') as f:
+        json.dump({
+            'videos': videos,
+            'status': 'pending',
+            'created_at': time.time()
+        }, f)
+    
+    # 启动后台任务处理视频合并
+    threading.Thread(target=process_merge_task, args=(task_id,)).start()
+    
+    return jsonify({
+        'task_id': task_id,
+        'status': 'pending'
+    })
+
+def process_merge_task(task_id):
+    """处理视频合并任务"""
+    task_folder = os.path.join(MERGE_TASKS_FOLDER, task_id)
+    task_file = os.path.join(task_folder, 'task.json')
+    
+    try:
+        # 读取任务信息
+        with open(task_file, 'r') as f:
+            task_data = json.load(f)
+        
+        videos = task_data['videos']
+        
+        # 更新任务状态为处理中
+        task_data['status'] = 'processing'
+        with open(task_file, 'w') as f:
+            json.dump(task_data, f)
+        
+        # 准备合并文件列表
+        video_list_file = os.path.join(task_folder, 'videos.txt')
+        with open(video_list_file, 'w') as f:
+            for video in videos:
+                # 确保视频路径存在
+                video_path = video['path']
+                if os.path.exists(video_path):
+                    f.write(f"file '{video_path}'\n")
+        
+        # 设置输出文件路径
+        output_file = os.path.join(task_folder, 'merged.mp4')
+        
+        # 使用FFmpeg合并视频
+        cmd = [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', video_list_file,
+            '-c', 'copy',
+            output_file
+        ]
+        
+        # 执行FFmpeg命令
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        
+        if process.returncode != 0:
+            # 合并失败
+            task_data['status'] = 'failed'
+            task_data['error'] = stderr.decode('utf-8', errors='ignore')
+        else:
+            # 合并成功
+            task_data['status'] = 'completed'
+            task_data['output_file'] = output_file
+            task_data['output_url'] = url_for('stream', filename=f'merge_tasks/{task_id}/merged.mp4', _external=True)
+            task_data['completed_at'] = time.time()
+        
+        # 更新任务状态
+        with open(task_file, 'w') as f:
+            json.dump(task_data, f)
+            
+    except Exception as e:
+        # 处理异常
+        try:
+            task_data = {'status': 'failed', 'error': str(e)}
+            with open(task_file, 'w') as f:
+                json.dump(task_data, f)
+        except:
+            pass
+
+@app.route('/merge_task_status/<task_id>', methods=['GET'])
+def merge_task_status(task_id):
+    """获取视频合并任务的状态"""
+    task_file = os.path.join(MERGE_TASKS_FOLDER, task_id, 'task.json')
+    
+    if not os.path.exists(task_file):
+        return jsonify({'error': '任务不存在'}), 404
+    
+    try:
+        with open(task_file, 'r') as f:
+            task_data = json.load(f)
+        
+        return jsonify(task_data)
+    except Exception as e:
+        return jsonify({
+            'error': str(e)
+        }), 500
+    
+    return jsonify({
+        'count': reference_count
     })
 
 if __name__ == '__main__':

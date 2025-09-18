@@ -42,6 +42,19 @@
                         <h3>参考图生成</h3>
                         <p>上传1-4张参考图片，基于参考图生成视频</p>
                     </button>
+                    
+                    <button class="mode-button" data-mode="merge">
+                        <div class="mode-icon">
+                            <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+                                <line x1="12" y1="3" x2="12" y2="21"></line>
+                                <line x1="16" y1="12" x2="20" y2="12"></line>
+                                <line x1="4" y1="12" x2="8" y2="12"></line>
+                            </svg>
+                        </div>
+                        <h3>视频合并编辑</h3>
+                        <p>将多个生成好的视频按顺序拼接在一起</p>
+                    </button>
                 </div>
             </div>
 
@@ -486,6 +499,184 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 视频合并编辑页面 -->
+            <div class="generation-page" id="merge-page" style="display: none;">
+                <div class="page-header">
+                    <button class="back-button" onclick="showModeSelection()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="15,18 9,12 15,6"></polyline>
+                        </svg>
+                        返回选择
+                    </button>
+                    <h2>视频合并编辑</h2>
+                </div>
+
+                <div class="page-content">
+                    <!-- 视频节点管理区域 -->
+                    <div class="config-section">
+                        <h3>视频节点管理</h3>
+                        <form id="mergeConfigForm">
+                            <!-- 本地调试用 API Key（可选） -->
+                            <div class="form-row">
+                                <div class="form-group" style="flex:1 1 100%">
+                                    <label for="mergeApiKey">API Key（可选，仅本地调试，不会展示或记录）</label>
+                                    <input type="password" id="mergeApiKey" name="apiKey" placeholder="在此输入 API Key 可覆盖服务端环境变量">
+                                </div>
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="mergeOutputName">输出文件名</label>
+                                    <input type="text" id="mergeOutputName" name="outputName" value="merged_video" required>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="mergeOutputFormat">输出格式</label>
+                                    <select id="mergeOutputFormat" name="outputFormat">
+                                        <option value="mp4" selected>MP4</option>
+                                        <option value="webm">WebM</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- 视频节点列表 -->
+                    <div class="video-nodes-section">
+                        <div class="section-header">
+                            <h3>视频节点列表</h3>
+                            <button type="button" id="addVideoNode" class="btn btn-primary">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                添加视频节点
+                            </button>
+                        </div>
+                        
+                        <div id="videoNodesList" class="video-nodes-list">
+                            <div class="empty-nodes-message">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <circle cx="12" cy="12" r="4"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                                </svg>
+                                <p>暂无视频节点，请点击"添加视频节点"按钮</p>
+                            </div>
+                        </div>
+                        
+                        <div class="merge-actions">
+                            <button type="button" id="clearVideoNodes" class="btn btn-secondary">清空节点</button>
+                            <button type="button" id="mergeVideos" class="btn btn-success" disabled>合并视频</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 任务进度展示区域 -->
+                    <div class="task-progress-section" id="mergeTaskProgress" style="display: none;">
+                        <h3>合并进度</h3>
+                        <div class="task-steps">
+                            <!-- 步骤1: 视频验证 -->
+                            <div class="task-step" id="step-merge-validate">
+                                <div class="step-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                        <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="step-content">
+                                    <div class="step-title">视频验证</div>
+                                    <div class="step-description">验证所有视频节点</div>
+                                </div>
+                                <div class="step-status" id="merge-validate-status">待处理</div>
+                            </div>
+
+                            <!-- 步骤2: 合并处理 -->
+                            <div class="task-step" id="step-merge-process">
+                                <div class="step-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 3v18m-9-9h18"></path>
+                                    </svg>
+                                </div>
+                                <div class="step-content">
+                                    <div class="step-title">合并处理</div>
+                                    <div class="step-description">正在合并视频节点</div>
+                                </div>
+                                <div class="step-status" id="merge-process-status">待处理</div>
+                            </div>
+
+                            <!-- 步骤3: 合并完成 -->
+                            <div class="task-step" id="step-merge-complete">
+                                <div class="step-icon">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="20,6 9,17 4,12"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="step-content">
+                                    <div class="step-title">合并完成</div>
+                                    <div class="step-description">视频合并已完成</div>
+                                </div>
+                                <div class="step-status" id="merge-complete-status">待处理</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 合并结果展示区域 -->
+                    <div class="result-section" id="mergeResultSection" style="display: none;">
+                        <h3>合并结果</h3>
+                        <div class="video-container">
+                            <video id="mergeResultVideo" controls style="display: none;">
+                                您的浏览器不支持视频播放。
+                            </video>
+                        </div>
+                        <div class="result-actions">
+                            <a id="mergeDownloadLink" class="btn btn-primary" style="display: none;" download>下载合并视频</a>
+                            <button type="button" id="createNewMerge" class="btn btn-secondary" style="display: none;">创建新合并</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 视频节点模板 (隐藏) -->
+            <template id="videoNodeTemplate">
+                <div class="video-node" data-node-id="{nodeId}">
+                    <div class="node-header">
+                        <div class="node-title">节点 #{nodeNumber}</div>
+                        <div class="node-actions">
+                            <button type="button" class="btn-move-up" title="上移">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="18 15 12 9 6 15"></polyline>
+                                </svg>
+                            </button>
+                            <button type="button" class="btn-move-down" title="下移">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </button>
+                            <button type="button" class="btn-remove" title="删除">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="node-content">
+                        <div class="node-video-select">
+                            <label for="videoSelect_{nodeId}">选择视频</label>
+                            <select id="videoSelect_{nodeId}" class="video-select" required>
+                                <option value="">-- 请选择视频 --</option>
+                            </select>
+                        </div>
+                        <div class="node-video-preview">
+                            <video class="node-video-player" controls style="display: none;">
+                                您的浏览器不支持视频播放。
+                            </video>
+                        </div>
+                    </div>
+                </div>
+            </template>
         </main>
 
         <footer>
