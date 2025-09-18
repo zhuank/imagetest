@@ -567,6 +567,146 @@ footer {
     }
 }
 
+/* 任务进度条样式 */
+.task-progress-section {
+    margin: 30px 0;
+    padding: 25px;
+    background: #f8f9fa;
+    border-radius: 15px;
+    border: 1px solid #e9ecef;
+}
+
+.task-progress-section h3 {
+    color: #2c3e50;
+    margin-bottom: 20px;
+    font-size: 1.3rem;
+    font-weight: 600;
+}
+
+.task-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.task-step {
+    display: flex;
+    align-items: center;
+    padding: 15px 20px;
+    background: white;
+    border-radius: 10px;
+    border: 2px solid #e9ecef;
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.task-step.active {
+    border-color: #007bff;
+    background: #f0f8ff;
+    box-shadow: 0 2px 10px rgba(0, 123, 255, 0.1);
+}
+
+.task-step.completed {
+    border-color: #28a745;
+    background: #f0fff4;
+}
+
+.task-step.error {
+    border-color: #dc3545;
+    background: #fff5f5;
+}
+
+.step-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 15px;
+    transition: all 0.3s ease;
+}
+
+.task-step.active .step-icon {
+    background: #007bff;
+    color: white;
+}
+
+.task-step.completed .step-icon {
+    background: #28a745;
+    color: white;
+}
+
+.task-step.error .step-icon {
+    background: #dc3545;
+    color: white;
+}
+
+.step-content {
+    flex: 1;
+}
+
+.step-title {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 4px;
+    font-size: 1rem;
+}
+
+.step-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.step-status {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: #e9ecef;
+    color: #6c757d;
+    transition: all 0.3s ease;
+}
+
+.task-step.active .step-status {
+    background: #007bff;
+    color: white;
+}
+
+.task-step.completed .step-status {
+    background: #28a745;
+    color: white;
+}
+
+.task-step.error .step-status {
+    background: #dc3545;
+    color: white;
+}
+
+/* 加载动画 */
+.task-step.active .step-icon svg {
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 任务ID显示样式 */
+#task-id-display {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    color: #495057;
+}
+
+.task-step.active #task-id-display {
+    color: #007bff;
+    font-weight: 500;
+}
+
 @media (max-width: 480px) {
     .reference-upload-grid {
         grid-template-columns: 1fr;
@@ -578,6 +718,24 @@ footer {
     }
     
     .upload-placeholder p {
+        font-size: 0.8rem;
+    }
+    
+    .task-step {
+        padding: 12px 15px;
+    }
+    
+    .step-icon {
+        width: 35px;
+        height: 35px;
+        margin-right: 12px;
+    }
+    
+    .step-title {
+        font-size: 0.9rem;
+    }
+    
+    .step-description {
         font-size: 0.8rem;
     }
 }

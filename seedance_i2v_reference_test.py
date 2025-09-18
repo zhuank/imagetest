@@ -18,7 +18,7 @@ BytePlus ModelArk Seedance 参考图生视频 测试脚本
 说明：
   - 若仅传入1张，则只作为主体参考图，仍会生成“缓慢弯腰捡起地上物品”的动作（未绑定特定物品）。
   - 若传入2张，动作为“主体缓慢弯腰，捡起参考图2中的物品”。
-  - 参数固定为：--ratio 1092x1080 --dur 5 --fps 24 --wm false。
+  - 参数固定为：--ratio 1080x1080 --dur 5 --fps 24 --wm false。
 
 注意：不要把真实的长期密钥硬编码在代码中。此脚本仅用于本地测试演示。
 """
@@ -53,7 +53,7 @@ OUTPUT_DIR = os.path.abspath(os.path.join(os.getcwd(), "outputs"))
 def create_reference_i2v_task(
     api_key: str,
     model: str = "seedance-1-0-lite-i2v-250428",
-    prompt: str = "主体缓慢弯下腰，捡起地上的物品 --ratio 1092x1080 --dur 5 --fps 24 --wm false",
+    prompt: str = "主体缓慢弯下腰，捡起地上的物品 --ratio 1080x1080 --dur 5 --fps 24 --wm false",
     reference_image_urls: Optional[List[str]] = None,
     callback_url: Optional[str] = None,
 ) -> str:
@@ -337,7 +337,7 @@ def main():
         default=DEFAULT_REFERENCE_IMAGES,
         help="1~2 个图片URL或本地路径，顺序为：主图[必选]、物品参考图[可选]"
     )
-    parser.add_argument("--ratio", default="1092x1080", help="画面宽高比，例如 1092x1080")
+    parser.add_argument("--ratio", default="1080x1080", help="画面宽高比，例如 1080x1080")
     parser.add_argument("--dur", type=int, default=5, help="视频时长（秒）")
     parser.add_argument("--fps", type=int, default=24, help="视频帧率")
     parser.add_argument("--wm", choices=["true", "false"], default="false", help="是否加水印：true/false，默认 false")

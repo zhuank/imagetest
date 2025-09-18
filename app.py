@@ -28,6 +28,35 @@ os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 # 允许的文件扩展名
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
 
+# 新增：支持的分辨率与归一化
+ALLOWED_RESOLUTIONS = {"854x480", "1280x720", "1920x1080"}
+
+def normalize_ratio(val: str | None) -> str:
+    try:
+        if not val:
+            return "1080x1080"  # 修正：1080x1080 为新默认值
+        v = str(val).lower().strip()
+        # 支持常见别名
+        if v in {"480p", "480"}:
+            return "854x480"
+        if v in {"720p", "720"}:
+            return "1280x720"
+        if v in {"1080p", "1080"}:
+            return "1920x1080"
+        # 规范成 123x456 形式
+        v = v.replace("*", "x").replace("×", "x").replace(" ", "")
+        if "x" in v:
+            parts = v.split("x")
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                norm = f"{int(parts[0])}x{int(parts[1])}"
+                # 新增：支持正方形分辨率 1080x1080
+                if norm == "1080x1080" or norm in ALLOWED_RESOLUTIONS:
+                    return norm
+        # 不合法回退默认 1080x1080
+        return "1080x1080"
+    except Exception:
+        return "1080x1080"
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
@@ -83,6 +112,19 @@ def upload_to_catbox(file_path):
         print(f"Catbox upload failed: {e}")
     return None
 
+# 新增：0x0.st 兜底
+def upload_to_0x0(file_path):
+    try:
+        with open(file_path, 'rb') as f:
+            resp = requests.post('https://0x0.st', files={'file': f}, timeout=60)
+        if resp.status_code == 200:
+            url = resp.text.strip()
+            if url.startswith('http'):
+                return url
+    except Exception as e:
+        print(f"0x0.st upload failed: {e}")
+    return None
+
 def rehost_image(file_path):
     """将本地图片重新托管到公共服务获取直接链接（优先 catbox，其次 transfer.sh，再次 0x0.st）"""
     # 优先 catbox（在国内网络更稳定）
@@ -94,7 +136,7 @@ def rehost_image(file_path):
     if url:
         return url
     # 尝试 0x0.st 兜底
-    url = upload_to_0x0(file_path) # type: ignore
+    url = upload_to_0x0(file_path)
     if url:
         return url
     return None
@@ -104,7 +146,7 @@ def create_video_task(api_key, model_name, image_urls, **kwargs):
     try:
         # 构建包含视频参数的prompt
         base_prompt = kwargs.get('prompt', 'Generate a video based on the provided images')
-        ratio = kwargs.get('ratio', '1092x1080')
+        ratio = normalize_ratio(kwargs.get('ratio'))  # 默认在 normalize_ratio 内部处理
         duration = int(kwargs.get('duration', 5))
         fps = int(kwargs.get('fps', 24))
         watermark = 'false' if not kwargs.get('watermark', False) else 'true'
@@ -190,6 +232,31 @@ def poll_task_status(api_key, task_id, max_wait_time=300):
         return {"error": f"Task timeout. last_error={last_err}"}
     except Exception as e:
         return {"error": f"Polling error: {str(e)}"}
+
+# 新增：一次性查询任务状态（无内部轮询），用于 /task_status 接口，避免短超时
+
+def fetch_task_status_once(api_key, task_id):
+    try:
+        last_err = None
+        for client in get_ark_clients(api_key):
+            try:
+                result = client.content_generation.tasks.get(task_id=task_id)
+                if isinstance(result, dict):
+                    return result
+                try:
+                    return json.loads(result.model_dump_json())
+                except Exception:
+                    return {
+                        "status": getattr(result, 'status', None),
+                        "content": getattr(result, 'content', None),
+                        "result": getattr(result, 'result', None),
+                    }
+            except Exception as e:
+                last_err = e
+                continue
+        return {"error": f"Query failed: {last_err}"}
+    except Exception as e:
+        return {"error": f"Query error: {str(e)}"}
 
 def download_video(video_url, output_path):
     """下载生成的视频"""
@@ -298,7 +365,7 @@ def generate_video():
             return jsonify({'error': f'Missing required field: {field}'}), 400
 
     # 处理 API Key：去除空白、去除可能的 Bearer 前缀；若未提供则尝试环境变量
-    api_key_raw = str(data.get('api_key', '')).strip()
+    api_key_raw = (str(data.get('api_key', '')).strip() or (request.headers.get('Authorization') or '').strip())
     if api_key_raw.lower().startswith('bearer '):
         api_key_raw = api_key_raw[7:].strip()
     if not api_key_raw:
@@ -310,23 +377,19 @@ def generate_video():
     else:
         api_key = api_key_raw
 
-    # 可选：允许前端临时指定 base_url（覆盖当前进程的默认地域，仅对本服务生效）
+    # 可选：允许前端临时指定 base_url（覆盖当前进程的默认地域，仅在本服务生效）
     preferred_base = str(data.get('base_url', '')).strip()
     if preferred_base:
         os.environ['ARK_BASE_URL'] = preferred_base
-    
-    image_urls = data['image_urls']
-    if not image_urls or len(image_urls) == 0:
-        return jsonify({'error': 'No image URLs provided'}), 400
-    
-    # 构建视频生成参数（含 seed / temperature）
-    # seed：-1 表示随机；0 或正整数表示固定种子
+
+    # 构建视频生成参数（首尾帧）
     try:
         seed_val = int(data.get('seed', -1))
     except Exception:
         seed_val = -1
     if seed_val < -1:
         seed_val = -1
+
     try:
         temperature_val = float(data.get('temperature', 0.7))
     except Exception:
@@ -337,19 +400,23 @@ def generate_video():
         temperature_val = 1.0
 
     video_params = {
-        'prompt': data.get('prompt', 'Generate a video based on the provided images'),
-        'ratio': data.get('ratio', '1092x1080'),
+        'prompt': data.get('prompt', 'Generate a video from first frame to last frame'),
+        'ratio': normalize_ratio(data.get('ratio')),
         'duration': int(data.get('duration', 5)),
         'fps': int(data.get('fps', 24)),
         'watermark': data.get('watermark', False),
         'seed': seed_val,
         'temperature': temperature_val,
     }
+
+    model_name = data.get('model_name') or "seedance-1-0-lite-i2v-250428"
     
-    # 使用前端传入模型或默认 Seedance 模型ID（支持环境变量覆盖）
-    model_name = data.get('model_name') or os.environ.get('ARK_DEFAULT_MODEL') or "seedance-1-0-lite-t2v-250428"
-    
-    # 创建视频生成任务（SDK）
+    # 创建视频生成任务
+    # Get image_urls from data payload
+    image_urls = data.get('image_urls', [])
+    if not image_urls:
+        return jsonify({'error': 'No image URLs provided'}), 400
+        
     task_result = create_video_task(api_key, model_name, image_urls, **video_params)
     
     if 'error' in task_result:
@@ -439,19 +506,23 @@ def check_status(task_id):
 
 @app.route('/task_status/<task_id>', methods=['GET'])
 def get_task_status(task_id):
-    """获取任务状态"""
-    api_key = os.environ.get('ARK_API_KEY', '').strip()
+    """获取任务状态（无阻塞轮询，每次请求只做一次 tasks.get）"""
+    raw_api_key = (request.args.get('api_key') or request.headers.get('Authorization') or os.environ.get('ARK_API_KEY', '')).strip()
+    # 规范化：支持 'Bearer xxx' 或裸 Key，传入 SDK 必须是裸 Key
+    api_key = raw_api_key
+    if api_key.lower().startswith('bearer '):
+        api_key = api_key[7:].strip()
     if not api_key:
         return jsonify({'error': 'API key required'}), 400
     
     try:
-        result = poll_task_status(api_key, task_id, max_wait_time=1)
+        # 改为一次性查询，避免 1 秒内循环导致的 timeout 误判
+        result = fetch_task_status_once(api_key, task_id)
         
         if isinstance(result, dict) and result.get('error'):
             error_msg = result.get('error', '')
             # 处理方舟SDK的误导性错误信息
-            if 'API key doesn\'t exist' in error_msg or 'AuthenticationError' in error_msg:
-                # 这通常表示任务ID不存在，而不是API key问题
+            if "API key doesn't exist" in error_msg or 'AuthenticationError' in error_msg:
                 return jsonify({
                     'status': 'failed', 
                     'error': f'Task not found: {task_id}. Please check if the task ID is correct.',
@@ -481,7 +552,12 @@ def get_task_status(task_id):
             else:
                 return jsonify({'status': 'completed', 'video_url': video_url, 'progress': 100})
         elif status == 'failed':
-            return jsonify({'status': 'failed', 'error': 'Task failed', 'progress': 0})
+            # 尝试提取失败详情
+            error_detail = (content or {}).get('error') or result.get('error') or result.get('result', {}).get('error')
+            if error_detail:
+                return jsonify({'status': 'failed', 'error': error_detail, 'progress': 0})
+            else:
+                return jsonify({'status': 'failed', 'error': 'Task failed', 'progress': 0})
         else:
             # 处理中，返回估算进度
             progress = 50 if status == 'processing' else 25
@@ -489,8 +565,7 @@ def get_task_status(task_id):
             
     except Exception as e:
         error_msg = str(e)
-        # 处理方舟SDK的误导性错误信息
-        if 'API key doesn\'t exist' in error_msg or 'AuthenticationError' in error_msg:
+        if "API key doesn't exist" in error_msg or 'AuthenticationError' in error_msg:
             return jsonify({
                 'status': 'failed', 
                 'error': f'Task not found: {task_id}. Please check if the task ID is correct.',
@@ -639,22 +714,30 @@ def generate_firstlast_video():
     if not image_urls:
         return jsonify({'error': 'No valid images found. Please upload first frame image.'}), 400
     
-    # 获取API Key
-    api_key = os.environ.get('ARK_API_KEY', '').strip()
-    if not api_key:
-        return jsonify({'error': 'API key required'}), 400
-    
     # 获取JSON参数
     data = request.get_json() or {}
     
-    # 构建视频生成参数
+    # 获取API Key（优先前端传入，其次请求头，最后环境变量），自动去除 Bearer 前缀供 SDK 使用
+    raw_api_key = (data.get('api_key') or request.headers.get('Authorization') or os.environ.get('ARK_API_KEY', '')).strip()
+    api_key = raw_api_key
+    if api_key.lower().startswith('bearer '):
+        api_key = api_key[7:].strip()
+    if not api_key:
+        return jsonify({'error': 'API key required'}), 400
+
+    # 可选：覆盖 Ark Base URL
+    preferred_base = str(data.get('base_url', '')).strip()
+    if preferred_base:
+        os.environ['ARK_BASE_URL'] = preferred_base
+
+    # 构建视频生成参数（首尾帧）
     try:
         seed_val = int(data.get('seed', -1))
     except Exception:
         seed_val = -1
     if seed_val < -1:
         seed_val = -1
-        
+
     try:
         temperature_val = float(data.get('temperature', 0.7))
     except Exception:
@@ -663,17 +746,317 @@ def generate_firstlast_video():
         temperature_val = 0.0
     if temperature_val > 1:
         temperature_val = 1.0
-    
+
     video_params = {
         'prompt': data.get('prompt', 'Generate a video from first frame to last frame'),
-        'ratio': data.get('ratio', '1092x1080'),
+        'ratio': normalize_ratio(data.get('ratio')),
         'duration': int(data.get('duration', 5)),
         'fps': int(data.get('fps', 24)),
         'watermark': data.get('watermark', False),
         'seed': seed_val,
         'temperature': temperature_val,
     }
+
+    model_name = data.get('model_name') or "seedance-1-0-lite-i2v-250428"
     
+    # 创建视频生成任务
+    task_result = create_video_task(api_key, model_name, image_urls, **video_params)
+    
+    if 'error' in task_result:
+        return jsonify({'error': f'Task creation failed: {task_result["error"]}'}), 500
+    
+    task_id = task_result.get('id')
+    if not task_id:
+        return jsonify({'error': 'No task ID returned'}), 500
+    
+    return jsonify({
+        'success': True,
+        'task_id': task_id,
+        'message': 'First-last frame video generation started'
+    })
+
+@app.route('/generate_reference', methods=['POST'])
+def generate_reference_video():
+    """生成参考图视频"""
+    # 检查是否有已上传的参考图
+    reference_image_files = []
+    reference_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'reference')
+    if os.path.exists(reference_folder):
+        for filename in os.listdir(reference_folder):
+            if filename.startswith('ref_') and allowed_file(filename):
+                reference_image_files.append(filename)
+    
+    if not reference_image_files:
+        return jsonify({'error': 'No valid reference images found. Please upload images first.'}), 400
+    
+    # 重新托管最新的参考图（仅取 1~2 张，保持上传先后顺序：第一张为主体，第二张（可选）为物品参考）
+    image_urls = []
+    # 收集文件及其修改时间
+    files_with_mtime = []
+    for filename in reference_image_files:
+        file_path = os.path.join(reference_folder, filename)
+        try:
+            mtime = os.path.getmtime(file_path)
+            files_with_mtime.append((filename, mtime))
+        except Exception:
+            continue
+    # 按时间升序排序（越早的在前）
+    files_with_mtime.sort(key=lambda x: x[1])
+    # 仅取最后的 2 张（最新的 1~2 张），并保持原先后顺序
+    selected = [name for name, _ in files_with_mtime[-2:]]
+
+    for filename in selected:
+        file_path = os.path.join(reference_folder, filename)
+        rehosted_url = rehost_image(file_path)
+        if rehosted_url:
+            image_urls.append(rehosted_url)
+
+    if not image_urls:
+        return jsonify({'error': 'No valid reference images could be processed'}), 400
+    # 只保留最多 2 张
+    if len(image_urls) > 2:
+        image_urls = image_urls[:2]
+
+    if len(image_urls) > 4:
+        return jsonify({'error': 'Maximum 4 reference images allowed'}), 400
+    
+    return jsonify({
+        'success': True,
+        'files': reference_image_files,
+        'image_urls': image_urls,
+        'count': len(image_urls)
+    })
+
+# duplicate removed: legacy generate_firstlast route disabled
+def _generate_firstlast_video_legacy_removed():
+    """生成首尾帧视频"""
+    # 检查是否有已上传的首尾帧图片
+    first_frame_files = []
+    last_frame_files = []
+    
+    firstlast_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'firstlast')
+    if os.path.exists(firstlast_folder):
+        for filename in os.listdir(firstlast_folder):
+            if filename.startswith('first_') and allowed_file(filename):
+                first_frame_files.append(filename)
+            elif filename.startswith('last_') and allowed_file(filename):
+                last_frame_files.append(filename)
+    
+    # 处理首帧（必需）
+    image_urls = []
+    if first_frame_files:
+        # 取最新的首帧文件
+        latest_first = sorted(first_frame_files)[-1]
+        file_path = os.path.join(firstlast_folder, latest_first)
+        rehosted_url = rehost_image(file_path)
+        if rehosted_url:
+            image_urls.append(rehosted_url)
+    
+    # 处理尾帧（可选）
+    if last_frame_files:
+        # 取最新的尾帧文件
+        latest_last = sorted(last_frame_files)[-1]
+        file_path = os.path.join(firstlast_folder, latest_last)
+        rehosted_url = rehost_image(file_path)
+        if rehosted_url:
+            image_urls.append(rehosted_url)
+    
+    if not image_urls:
+        return jsonify({'error': 'No valid images found. Please upload first frame image.'}), 400
+    
+    # 获取JSON参数
+    data = request.get_json() or {}
+    
+    # 获取API Key（优先前端传入，其次请求头，最后环境变量），自动去除 Bearer 前缀供 SDK 使用
+    raw_api_key = (data.get('api_key') or request.headers.get('Authorization') or os.environ.get('ARK_API_KEY', '')).strip()
+    api_key = raw_api_key
+    if api_key.lower().startswith('bearer '):
+        api_key = api_key[7:].strip()
+    if not api_key:
+        return jsonify({'error': 'API key required'}), 400
+
+    # 可选：覆盖 Ark Base URL
+    preferred_base = str(data.get('base_url', '')).strip()
+    if preferred_base:
+        os.environ['ARK_BASE_URL'] = preferred_base
+
+    # 构建视频生成参数（首尾帧）
+    try:
+        seed_val = int(data.get('seed', -1))
+    except Exception:
+        seed_val = -1
+    if seed_val < -1:
+        seed_val = -1
+
+    try:
+        temperature_val = float(data.get('temperature', 0.7))
+    except Exception:
+        temperature_val = 0.7
+    if temperature_val < 0:
+        temperature_val = 0.0
+    if temperature_val > 1:
+        temperature_val = 1.0
+
+    video_params = {
+        'prompt': data.get('prompt', 'Generate a video from first frame to last frame'),
+        'ratio': normalize_ratio(data.get('ratio')),
+        'duration': int(data.get('duration', 5)),
+        'fps': int(data.get('fps', 24)),
+        'watermark': data.get('watermark', False),
+        'seed': seed_val,
+        'temperature': temperature_val,
+    }
+
+    model_name = data.get('model_name') or "seedance-1-0-lite-i2v-250428"
+    
+    # 创建视频生成任务
+    task_result = create_video_task(api_key, model_name, image_urls, **video_params)
+    
+    if 'error' in task_result:
+        return jsonify({'error': f'Task creation failed: {task_result["error"]}'}), 500
+    
+    task_id = task_result.get('id')
+    if not task_id:
+        return jsonify({'error': 'No task ID returned'}), 500
+    
+    return jsonify({
+        'success': True,
+        'task_id': task_id,
+        'message': 'First-last frame video generation started'
+    })
+
+@app.route('/generate_reference', methods=['POST'])
+def generate_reference_video():
+    """生成参考图视频"""
+    # 检查是否有已上传的参考图
+    reference_image_files = []
+    reference_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'reference')
+    if os.path.exists(reference_folder):
+        for filename in os.listdir(reference_folder):
+            if filename.startswith('ref_') and allowed_file(filename):
+                reference_image_files.append(filename)
+    
+    if not reference_image_files:
+        return jsonify({'error': 'No valid reference images found. Please upload images first.'}), 400
+    
+    # 重新托管最新的参考图（仅取 1~2 张，保持上传先后顺序：第一张为主体，第二张（可选）为物品参考）
+    image_urls = []
+    # 收集文件及其修改时间
+    files_with_mtime = []
+    for filename in reference_image_files:
+        file_path = os.path.join(reference_folder, filename)
+        try:
+            mtime = os.path.getmtime(file_path)
+            files_with_mtime.append((filename, mtime))
+        except Exception:
+            continue
+    # 按时间升序排序（越早的在前）
+    files_with_mtime.sort(key=lambda x: x[1])
+    # 仅取最后的 2 张（最新的 1~2 张），并保持原先后顺序
+    selected = [name for name, _ in files_with_mtime[-2:]]
+
+    for filename in selected:
+        file_path = os.path.join(reference_folder, filename)
+        rehosted_url = rehost_image(file_path)
+        if rehosted_url:
+            image_urls.append(rehosted_url)
+
+    if not image_urls:
+        return jsonify({'error': 'No valid reference images could be processed'}), 400
+    # 只保留最多 2 张
+    if len(image_urls) > 2:
+        image_urls = image_urls[:2]
+
+    if len(image_urls) > 4:
+        return jsonify({'error': 'Maximum 4 reference images allowed'}), 400
+    
+    return jsonify({
+        'success': True,
+        'files': image_urls,
+        'image_urls': image_urls,
+        'count': len(image_urls)
+    })
+
+@app.route('/generate_firstlast', methods=['POST'])
+def generate_firstlast_video():
+    """生成首尾帧视频"""
+    # 检查是否有已上传的首尾帧图片
+    first_frame_files = []
+    last_frame_files = []
+    
+    firstlast_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'firstlast')
+    if os.path.exists(firstlast_folder):
+        for filename in os.listdir(firstlast_folder):
+            if filename.startswith('first_') and allowed_file(filename):
+                first_frame_files.append(filename)
+            elif filename.startswith('last_') and allowed_file(filename):
+                last_frame_files.append(filename)
+    
+    # 处理首帧（必需）
+    image_urls = []
+    if first_frame_files:
+        # 取最新的首帧文件
+        latest_first = sorted(first_frame_files)[-1]
+        file_path = os.path.join(firstlast_folder, latest_first)
+        rehosted_url = rehost_image(file_path)
+        if rehosted_url:
+            image_urls.append(rehosted_url)
+    
+    # 处理尾帧（可选）
+    if last_frame_files:
+        # 取最新的尾帧文件
+        latest_last = sorted(last_frame_files)[-1]
+        file_path = os.path.join(firstlast_folder, latest_last)
+        rehosted_url = rehost_image(file_path)
+        if rehosted_url:
+            image_urls.append(rehosted_url)
+    
+    if not image_urls:
+        return jsonify({'error': 'No valid images found. Please upload first frame image.'}), 400
+    
+    # 获取JSON参数
+    data = request.get_json() or {}
+    
+    # 获取API Key（优先前端传入，其次请求头，最后环境变量），自动去除 Bearer 前缀供 SDK 使用
+    raw_api_key = (data.get('api_key') or request.headers.get('Authorization') or os.environ.get('ARK_API_KEY', '')).strip()
+    api_key = raw_api_key
+    if api_key.lower().startswith('bearer '):
+        api_key = api_key[7:].strip()
+    if not api_key:
+        return jsonify({'error': 'API key required'}), 400
+
+    # 可选：覆盖 Ark Base URL
+    preferred_base = str(data.get('base_url', '')).strip()
+    if preferred_base:
+        os.environ['ARK_BASE_URL'] = preferred_base
+
+    # 构建视频生成参数（首尾帧）
+    try:
+        seed_val = int(data.get('seed', -1))
+    except Exception:
+        seed_val = -1
+    if seed_val < -1:
+        seed_val = -1
+
+    try:
+        temperature_val = float(data.get('temperature', 0.7))
+    except Exception:
+        temperature_val = 0.7
+    if temperature_val < 0:
+        temperature_val = 0.0
+    if temperature_val > 1:
+        temperature_val = 1.0
+
+    video_params = {
+        'prompt': data.get('prompt', 'Generate a video from first frame to last frame'),
+        'ratio': normalize_ratio(data.get('ratio')),
+        'duration': int(data.get('duration', 5)),
+        'fps': int(data.get('fps', 24)),
+        'watermark': data.get('watermark', False),
+        'seed': seed_val,
+        'temperature': temperature_val,
+    }
+
     model_name = data.get('model_name') or "seedance-1-0-lite-i2v-250428"
     
     # 创建视频生成任务
@@ -717,14 +1100,22 @@ def generate_reference_video():
     if not image_urls:
         return jsonify({'error': 'No valid reference images could be processed'}), 400
     
-    # 获取API Key
-    api_key = os.environ.get('ARK_API_KEY', '').strip()
-    if not api_key:
-        return jsonify({'error': 'API key required'}), 400
-    
     # 获取JSON参数
     data = request.get_json() or {}
     
+    # 获取API Key（优先前端传入，其次请求头，最后环境变量），自动去除 Bearer 前缀供 SDK 使用
+    raw_api_key = (data.get('api_key') or request.headers.get('Authorization') or os.environ.get('ARK_API_KEY', '')).strip()
+    api_key = raw_api_key
+    if api_key.lower().startswith('bearer '):
+        api_key = api_key[7:].strip()
+    if not api_key:
+        return jsonify({'error': 'API key required'}), 400
+
+    # 可选：覆盖 Ark Base URL
+    preferred_base = str(data.get('base_url', '')).strip()
+    if preferred_base:
+        os.environ['ARK_BASE_URL'] = preferred_base
+
     # 构建视频生成参数
     try:
         seed_val = int(data.get('seed', -1))
@@ -744,7 +1135,7 @@ def generate_reference_video():
     
     video_params = {
         'prompt': data.get('prompt', 'Generate a video based on the provided reference images'),
-        'ratio': data.get('ratio', '1092x1080'),
+        'ratio': normalize_ratio(data.get('ratio')),
         'duration': int(data.get('duration', 5)),
         'fps': int(data.get('fps', 24)),
         'watermark': data.get('watermark', False),
@@ -770,14 +1161,54 @@ def generate_reference_video():
         'message': 'Reference image video generation started'
     })
 
-@app.route('/download/<filename>')
-def download_video_file(filename):
-    """下载生成的视频文件"""
+@app.route('/stream/<filename>')
+def stream_video_file(filename):
+    """内联流式播放生成的视频（用于 <video> 播放，不触发下载）"""
     file_path = os.path.join(app.config['OUTPUT_FOLDER'], filename)
     if os.path.exists(file_path):
-        return send_file(file_path, as_attachment=True)
+        resp = send_file(file_path, mimetype='video/mp4', conditional=True)
+        # 强制内联，允许范围请求，便于拖动进度条
+        resp.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+        resp.headers['Accept-Ranges'] = 'bytes'
+        return resp
     else:
         return jsonify({'error': 'File not found'}), 404
+
+@app.route('/check_firstlast_files', methods=['GET'])
+def check_firstlast_files():
+    """检查是否有已上传的首尾帧文件"""
+    firstlast_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'firstlast')
+    has_first_frame = False
+    has_last_frame = False
+    
+    if os.path.exists(firstlast_folder):
+        for filename in os.listdir(firstlast_folder):
+            if filename.startswith('first_') and allowed_file(filename):
+                has_first_frame = True
+            elif filename.startswith('last_') and allowed_file(filename):
+                has_last_frame = True
+    
+    return jsonify({
+        'success': True,
+        'has_first_frame': has_first_frame,
+        'has_last_frame': has_last_frame
+    })
+
+@app.route('/check_reference_files', methods=['GET'])
+def check_reference_files():
+    """检查是否有已上传的参考图文件"""
+    reference_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'reference')
+    reference_count = 0
+    
+    if os.path.exists(reference_folder):
+        for filename in os.listdir(reference_folder):
+            if filename.startswith('ref_') and allowed_file(filename):
+                reference_count += 1
+    
+    return jsonify({
+        'success': True,
+        'reference_count': reference_count
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
