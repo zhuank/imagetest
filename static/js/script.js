@@ -1,3 +1,33 @@
+// 显示模式选择页面
+function showModeSelection() {
+    // 隐藏所有生成页面
+    document.querySelectorAll('.generation-page').forEach(page => {
+        page.style.display = 'none';
+    });
+    
+    // 显示模式选择页面
+    document.getElementById('mode-selection').style.display = 'block';
+}
+
+// 显示特定生成页面
+function showGenerationPage(mode) {
+    // 隐藏模式选择页面
+    document.getElementById('mode-selection').style.display = 'none';
+    
+    // 隐藏所有生成页面
+    document.querySelectorAll('.generation-page').forEach(page => {
+        page.style.display = 'none';
+    });
+    
+    // 显示选定的生成页面
+    document.getElementById(`${mode}-page`).style.display = 'block';
+    
+    // 如果是合并模式，加载可用视频
+    if (mode === 'merge') {
+        loadAvailableVideos();
+    }
+}
+
 // 初始化视频合并模式
 function initializeMergeMode() {
     // 添加视频节点按钮
@@ -37,6 +67,15 @@ async function loadAvailableVideos() {
     }
 }
 
+// 全局变量
+let videoNodes = []; // 存储视频节点
+let nextNodeId = 1; // 下一个节点ID
+
+// 初始化可用视频列表
+if (!window.availableVideos) {
+    window.availableVideos = []; // 可用视频列表
+}
+
 // 添加视频节点
 function addVideoNode() {
     const nodeId = `node_${nextNodeId++}`;
@@ -67,14 +106,11 @@ function addVideoNode() {
     videoNodes.push({
         id: nodeId,
         element: nodeElement,
-        videoId: null
+        file: null
     });
     
     // 设置节点事件
     setupNodeEvents(nodeId, nodeElement);
-    
-    // 填充视频选择列表
-    populateVideoSelect(nodeId);
     
     // 更新合并按钮状态
     updateMergeButtonState();
@@ -82,20 +118,32 @@ function addVideoNode() {
 
 // 设置节点事件
 function setupNodeEvents(nodeId, nodeElement) {
-    // 视频选择事件
-    const videoSelect = nodeElement.querySelector(`#videoSelect_${nodeId}`);
-    videoSelect.addEventListener('change', function() {
-        const selectedVideo = this.value;
-        const nodeIndex = videoNodes.findIndex(node => node.id === nodeId);
-        
-        if (nodeIndex !== -1) {
-            videoNodes[nodeIndex].videoId = selectedVideo;
+    // 文件上传事件
+    const videoUpload = nodeElement.querySelector(`#videoUpload_${nodeId}`);
+    const fileNameSpan = nodeElement.querySelector(`#fileName_${nodeId}`);
+    const uploadButton = nodeElement.querySelector('.btn-upload');
+    
+    // 点击按钮触发文件选择
+    uploadButton.addEventListener('click', function() {
+        videoUpload.click();
+    });
+    
+    // 文件选择变化事件
+    videoUpload.addEventListener('change', function() {
+        if (this.files.length > 0) {
+            const file = this.files[0];
+            fileNameSpan.textContent = file.name;
             
-            // 更新视频预览
-            updateVideoPreview(nodeId, selectedVideo);
-            
-            // 更新合并按钮状态
-            updateMergeButtonState();
+            const nodeIndex = videoNodes.findIndex(node => node.id === nodeId);
+            if (nodeIndex !== -1) {
+                videoNodes[nodeIndex].file = file;
+                
+                // 更新视频预览
+                updateVideoPreviewFromFile(nodeId, file);
+                
+                // 更新合并按钮状态
+                updateMergeButtonState();
+            }
         }
     });
     
@@ -115,46 +163,22 @@ function setupNodeEvents(nodeId, nodeElement) {
     });
 }
 
-// 填充视频选择列表
-function populateVideoSelect(nodeId) {
-    if (!window.availableVideos) return;
-    
-    const videoSelect = document.querySelector(`#videoSelect_${nodeId}`);
-    if (!videoSelect) return;
-    
-    // 保留第一个选项（请选择视频）
-    videoSelect.innerHTML = '<option value="">-- 请选择视频 --</option>';
-    
-    // 添加可用视频
-    window.availableVideos.forEach(video => {
-        const option = document.createElement('option');
-        option.value = video.id;
-        option.textContent = video.name;
-        videoSelect.appendChild(option);
-    });
-}
-
-// 更新所有视频选择列表
-function updateAllVideoSelects() {
-    videoNodes.forEach(node => {
-        populateVideoSelect(node.id);
-    });
-}
-
-// 更新视频预览
-function updateVideoPreview(nodeId, videoId) {
-    if (!window.availableVideos) return;
-    
-    const video = window.availableVideos.find(v => v.id === videoId);
-    if (!video) return;
-    
+// 从文件更新视频预览
+function updateVideoPreviewFromFile(nodeId, file) {
     const nodeElement = document.querySelector(`.video-node[data-node-id="${nodeId}"]`);
     if (!nodeElement) return;
     
     const videoPlayer = nodeElement.querySelector('.node-video-player');
     if (videoPlayer) {
-        videoPlayer.src = video.url;
+        // 创建一个临时URL用于预览
+        const objectURL = URL.createObjectURL(file);
+        videoPlayer.src = objectURL;
         videoPlayer.style.display = 'block';
+        
+        // 当视频不再需要时，释放URL
+        videoPlayer.onloadeddata = function() {
+            console.log(`视频 ${file.name} 已加载预览`);
+        };
     }
 }
 
@@ -260,8 +284,8 @@ function clearVideoNodes() {
 function updateMergeButtonState() {
     const mergeButton = document.getElementById('mergeVideos');
     
-    // 检查是否有至少两个节点且都选择了视频
-    const validNodes = videoNodes.filter(node => node.videoId);
+    // 检查是否有至少两个节点且都选择了视频或上传了文件
+    const validNodes = videoNodes.filter(node => node.file || node.videoId);
     const canMerge = validNodes.length >= 2;
     
     mergeButton.disabled = !canMerge;
@@ -282,29 +306,57 @@ async function mergeVideos() {
     updateMergeStepStatus('merge-complete-status', '待处理');
     
     // 准备请求数据
-    const videoIds = videoNodes
-        .filter(node => node.videoId)
-        .map(node => node.videoId);
+    const formData = new FormData();
     
-    const formData = new FormData(document.getElementById('mergeConfigForm'));
-    const outputName = formData.get('outputName') || 'merged_video';
-    const outputFormat = formData.get('outputFormat') || 'mp4';
-    const apiKey = formData.get('apiKey') || '';
+    // 添加配置信息
+    const configForm = document.getElementById('mergeConfigForm');
+    const outputName = configForm.elements['outputName'].value || 'merged_video';
+    const outputFormat = configForm.elements['outputFormat'].value || 'mp4';
+    const apiKey = configForm.elements['apiKey'].value || '';
+    
+    formData.append('output_name', outputName);
+    formData.append('output_format', outputFormat);
+    formData.append('api_key', apiKey);
+    
+    // 添加视频文件
+    let hasFiles = false;
+    videoNodes.forEach((node, index) => {
+        if (node.file) {
+            formData.append(`video_${index}`, node.file);
+            hasFiles = true;
+        } else if (node.videoId) {
+            formData.append(`video_id_${index}`, node.videoId);
+        }
+    });
     
     try {
         // 发送合并请求
-        const response = await fetch('/merge_videos_task', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                video_ids: videoIds,
-                output_name: outputName,
-                output_format: outputFormat,
-                api_key: apiKey
-            })
-        });
+        let response;
+        if (hasFiles) {
+            // 如果有文件，使用FormData
+            response = await fetch('/merge_videos_upload', {
+                method: 'POST',
+                body: formData
+            });
+        } else {
+            // 否则使用JSON
+            const videoIds = videoNodes
+                .filter(node => node.videoId)
+                .map(node => node.videoId);
+                
+            response = await fetch('/merge_videos_task', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    video_ids: videoIds,
+                    output_name: outputName,
+                    output_format: outputFormat,
+                    api_key: apiKey
+                })
+            });
+        }
         
         const result = await response.json();
         
@@ -396,3 +448,17 @@ function resetMergeMode() {
     // 重置表单
     document.getElementById('mergeConfigForm').reset();
 }
+
+// 初始化应用
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化模式选择按钮
+    document.querySelectorAll('.mode-button').forEach(button => {
+        button.addEventListener('click', function() {
+            const mode = this.getAttribute('data-mode');
+            showGenerationPage(mode);
+        });
+    });
+    
+    // 初始化视频合并模式
+    initializeMergeMode();
+});

@@ -664,10 +664,19 @@
                     </div>
                     <div class="node-content">
                         <div class="node-video-select">
-                            <label for="videoSelect_{nodeId}">选择视频</label>
-                            <select id="videoSelect_{nodeId}" class="video-select" required>
-                                <option value="">-- 请选择视频 --</option>
-                            </select>
+                            <label for="videoUpload_{nodeId}">选择视频</label>
+                            <div class="file-upload-wrapper">
+                                <input type="file" id="videoUpload_{nodeId}" class="video-upload" accept="video/*">
+                                <button type="button" class="btn-upload">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="7,10 12,15 17,10"></polyline>
+                                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                                    </svg>
+                                    选择本地视频文件
+                                </button>
+                                <span class="file-name" id="fileName_{nodeId}">未选择文件</span>
+                            </div>
                         </div>
                         <div class="node-video-preview">
                             <video class="node-video-player" controls style="display: none;">
