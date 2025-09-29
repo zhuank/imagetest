@@ -127,6 +127,13 @@ function addVideoNode() {
     
     return nodeInfo;
 }
+
+function addVideoNode(nodeId) {
+    const nodeElement = createNodeElement(nodeId);
+    
+    // 添加到节点列表
+    videoNodes.push({
+        id: nodeId,
         element: nodeElement,
         file: null
     });
@@ -351,6 +358,7 @@ function updateNodeDisplay(nodeInfo) {
     
     // 更新节点标题
     updateNodeNumbers();
+}
 }
 
 // 更新节点编号

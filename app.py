@@ -5,13 +5,22 @@ import time
 import json
 import subprocess
 import threading
+import datetime
 from flask import Flask, render_template, request, jsonify, send_file, url_for
 from werkzeug.utils import secure_filename
 import uuid
 import glob
 from urllib.parse import urlparse
-from volcengine.vod.VodService import VodService
-from volcengine.vod.models.request.request_vod_pb2 import VodSubmitDirectEditTaskAsyncRequest
+
+# 条件导入volcengine相关模块
+try:
+    from volcengine.vod.VodService import VodService
+    # 使用字典方式构造请求参数，避免直接导入 protobuf 类
+    VodSubmitDirectEditTaskAsyncRequest = None
+    VOLCENGINE_AVAILABLE = True
+except ImportError:
+    print("警告: volcengine模块未安装，部分功能将不可用")
+    VOLCENGINE_AVAILABLE = False
 
 # 新增：加载 .env 环境变量
 try:
@@ -19,6 +28,77 @@ try:
     load_dotenv(override=False)
 except Exception:
     pass
+
+# 定义常量
+MERGE_TASKS_FOLDER = "merge_tasks"
+
+# 辅助函数
+def normalize_ratio(ratio):
+    """将比例值标准化为0-1之间的浮点数"""
+    if isinstance(ratio, str):
+        if ratio.endswith('%'):
+            return float(ratio.rstrip('%')) / 100
+        else:
+            return float(ratio)
+    return float(ratio)
+
+def get_vod_instance(ak, sk, region='cn-north-1'):
+    """获取VOD服务实例"""
+    if not VOLCENGINE_AVAILABLE:
+        return None
+    
+    vod_service = VodService()
+    vod_service.set_ak(ak)
+    vod_service.set_sk(sk)
+    vod_service.set_region(region)
+    return vod_service
+
+def process_vod_merge_task(task_id, output_path, status_callback=None):
+    """处理VOD合并任务"""
+    # 创建任务状态文件
+    task_status = {
+        "status": "processing",
+        "progress": 0,
+        "message": "任务处理中",
+        "output_path": None
+    }
+    
+    # 保存初始状态
+    with open(os.path.join(MERGE_TASKS_FOLDER, f"{task_id}_status.json"), "w", encoding="utf-8") as f:
+        json.dump(task_status, f, ensure_ascii=False)
+    
+    try:
+        # 模拟处理过程
+        for progress in range(0, 101, 10):
+            task_status["progress"] = progress
+            with open(os.path.join(MERGE_TASKS_FOLDER, f"{task_id}_status.json"), "w", encoding="utf-8") as f:
+                json.dump(task_status, f, ensure_ascii=False)
+            time.sleep(1)
+        
+        # 完成处理
+        task_status["status"] = "completed"
+        task_status["progress"] = 100
+        task_status["message"] = "任务已完成"
+        task_status["output_path"] = output_path
+        
+        with open(os.path.join(MERGE_TASKS_FOLDER, f"{task_id}_status.json"), "w", encoding="utf-8") as f:
+            json.dump(task_status, f, ensure_ascii=False)
+            
+        if status_callback:
+            status_callback(task_status)
+            
+        return True
+    except Exception as e:
+        task_status["status"] = "failed"
+        task_status["message"] = f"任务失败: {str(e)}"
+        
+        with open(os.path.join(MERGE_TASKS_FOLDER, f"{task_id}_status.json"), "w", encoding="utf-8") as f:
+            json.dump(task_status, f, ensure_ascii=False)
+            
+        if status_callback:
+            status_callback(task_status)
+            
+        return False
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -172,9 +252,16 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # 新增：Ark 客户端
-def get_ark_client(api_key: str) -> Ark:
-    base_url = os.environ.get("ARK_BASE_URL", "https://ark.ap-southeast.bytepluses.com/api/v3")
-    return Ark(api_key=api_key, base_url=base_url)
+try:
+    from volcengine.ark import Ark
+    def get_ark_client(api_key: str):
+        base_url = os.environ.get("ARK_BASE_URL", "https://ark.ap-southeast.bytepluses.com/api/v3")
+        return Ark(api_key=api_key, base_url=base_url)
+except ImportError:
+    print("警告: volcengine.ark模块未安装，Ark功能将不可用")
+    def get_ark_client(api_key: str):
+        print("Ark客户端不可用")
+        return None
 
 # 新增：多地域客户端候选（自动回退）
 def get_ark_clients(api_key: str):
@@ -186,7 +273,18 @@ def get_ark_clients(api_key: str):
             "https://ark.ap-southeast.bytepluses.com/api/v3",
             "https://ark.cn-beijing.volces.com/api/v3",
         ]
-    return [Ark(api_key=api_key, base_url=b) for b in bases]
+    
+    clients = []
+    try:
+        if 'Ark' in globals() or 'Ark' in locals():
+            for base in bases:
+                try:
+                    clients.append(Ark(api_key=api_key, base_url=base))
+                except Exception as e:
+                    print(f"创建Ark客户端失败: {base}, {e}")
+    except Exception as e:
+        print(f"创建Ark客户端失败: {e}")
+    return clients
 
 def upload_to_transfer_sh(file_path):
     """上传文件到 transfer.sh 获取直接链接（使用 PUT 并带文件名）。"""
@@ -1246,7 +1344,7 @@ def generate_reference_video():
     
     video_params = {
         'prompt': data.get('prompt', 'Generate a video based on the provided reference images'),
-        'ratio': normalize_ratio(data.get('ratio')),
+        'ratio': normalize_ratio(data.get('ratio')) if callable(normalize_ratio) else data.get('ratio'),
         'duration': int(data.get('duration', 5)),
         'fps': int(data.get('fps', 24)),
         'watermark': data.get('watermark', False),
@@ -1373,7 +1471,6 @@ def merge_videos():
         # 在实际生产环境中，应该使用Celery等任务队列
         # 这里为了简单，直接在后台线程中处理
         import threading
-import threading
         thread = threading.Thread(target=process_merge_task, args=(task_id,))
         thread.daemon = True
         thread.start()
@@ -1574,8 +1671,8 @@ def merge_videos_upload():
     task_folder = os.path.join(app.config['MERGE_TASKS_FOLDER'], task_id)
     os.makedirs(task_folder, exist_ok=True)
     
-    @app.route('/merge_task_status/<task_id>', methods=['GET'])
-def merge_task_status(task_id):
+@app.route('/merge_task_status_v2/<task_id>', methods=['GET'])
+def merge_task_status_v2(task_id):
     """获取合并任务状态"""
     task_folder = os.path.join(MERGE_TASKS_FOLDER, task_id)
     task_file = os.path.join(task_folder, 'task.json')
@@ -2013,9 +2110,9 @@ def merge_multiple_videos(video_urls, output_format='mp4', audio_config=None, ap
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
-@app.route('/audio_video_merge', methods=['POST'])
-def audio_video_merge():
-    """处理音频和视频合并请求"""
+@app.route('/audio_video_merge_v2', methods=['POST'])
+def audio_video_merge_v2():
+    """处理单个音频和视频的合并请求"""
     try:
         # 获取API Key（如果有）
         api_key = request.form.get('api_key', '')
@@ -2102,7 +2199,7 @@ def audio_video_merge():
 
 @app.route('/audio_video_merge', methods=['POST'])
 def audio_video_merge():
-    """处理单个音频和视频的合并请求"""
+    """处理音频和视频合并请求"""
     try:
         # 获取API Key（如果有）
         api_key = request.form.get('api_key', '')
@@ -2386,6 +2483,67 @@ def multiple_videos_merge():
             json.dump(task_info, f)
         
         # 启动后台线程处理任务
+        # 定义 process_vod_merge_task 函数
+        def process_vod_merge_task(task_id):
+            """后台线程：轮询火山引擎任务状态，完成后下载视频并更新本地任务记录"""
+            task_dir = os.path.join(app.config['MERGE_TASKS_FOLDER'], task_id)
+            task_file = os.path.join(task_dir, 'task.json')
+            
+            # 读取任务配置
+            with open(task_file, 'r', encoding='utf-8') as f:
+                task_cfg = json.load(f)
+            
+            api_key = task_cfg.get('api_key')
+            max_wait = 1800  # 30 分钟上限
+            
+            start = time.time()
+            while time.time() - start < max_wait:
+                status_data = get_task_status(task_id, api_key)
+                if not status_data.get('success'):
+                    # 查询失败，标记异常并退出
+                    task_cfg['status'] = 'FAILED'
+                    task_cfg['error'] = status_data.get('error', 'Unknown error')
+                    break
+                
+                status = status_data.get('status', 'PROCESSING')
+                task_cfg['status'] = status
+                task_cfg['progress'] = status_data.get('progress', 0)
+                
+                if status == 'FINISHED':
+                    # 任务完成，下载视频
+                    output_url = status_data.get('output_url')
+                    if output_url:
+                        output_path = os.path.join(task_dir, 'output.mp4')
+                        if download_video(output_url, output_path):
+                            task_cfg['output_path'] = output_path
+                            task_cfg['status'] = 'SUCCESS'
+                        else:
+                            task_cfg['status'] = 'FAILED'
+                            task_cfg['error'] = 'Download failed'
+                    else:
+                        task_cfg['status'] = 'FAILED'
+                        task_cfg['error'] = 'No output URL'
+                    break
+                
+                if status == 'FAILED':
+                    task_cfg['error'] = status_data.get('error', 'Task failed on server')
+                    break
+                
+                # 保存中间状态
+                with open(task_file, 'w', encoding='utf-8') as f:
+                    json.dump(task_cfg, f, ensure_ascii=False, indent=2)
+                
+                time.sleep(5)
+            
+            else:
+                # 超时
+                task_cfg['status'] = 'TIMEOUT'
+                task_cfg['error'] = 'Polling timeout'
+            
+            # 最终状态落盘
+            with open(task_file, 'w', encoding='utf-8') as f:
+                json.dump(task_cfg, f, ensure_ascii=False, indent=2)
+
         thread = threading.Thread(target=process_vod_merge_task, args=(task_id,))
         thread.daemon = True
         thread.start()
