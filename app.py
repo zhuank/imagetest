@@ -14,7 +14,11 @@ from urllib.parse import urlparse
 
 # 条件导入volcengine相关模块
 try:
-    from volcengine.vod.VodService import VodService
+    # 如果 volcengine 未安装，则跳过导入
+    try:
+        from volcengine.vod import VodService
+    except ModuleNotFoundError:
+        VodService = None
     # 使用字典方式构造请求参数，避免直接导入 protobuf 类
     VodSubmitDirectEditTaskAsyncRequest = None
     VOLCENGINE_AVAILABLE = True
@@ -254,6 +258,14 @@ def allowed_file(filename):
 # 新增：Ark 客户端
 try:
     from volcengine.ark import Ark
+except ImportError:
+    # 如果 volcengine.ark 模块不存在，则 Ark 设为 None
+    Ark = None
+try:
+    from volcengine.ark import Ark
+except ImportError:
+    # 如果 volcengine.ark 模块不存在，则 Ark 设为 None
+    Ark = None
     def get_ark_client(api_key: str):
         base_url = os.environ.get("ARK_BASE_URL", "https://ark.ap-southeast.bytepluses.com/api/v3")
         return Ark(api_key=api_key, base_url=base_url)

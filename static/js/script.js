@@ -128,23 +128,6 @@ function addVideoNode() {
     return nodeInfo;
 }
 
-function addVideoNode(nodeId) {
-    const nodeElement = createNodeElement(nodeId);
-    
-    // 添加到节点列表
-    videoNodes.push({
-        id: nodeId,
-        element: nodeElement,
-        file: null
-    });
-    
-    // 设置节点事件
-    setupNodeEvents(nodeId, nodeElement);
-    
-    // 更新合并按钮状态
-    updateMergeButtonState();
-}
-
 // 绑定节点事件
 function bindNodeEvents(nodeInfo) {
     const nodeId = nodeInfo.id;
@@ -340,24 +323,6 @@ function updateNodeDisplay(nodeInfo) {
         if (videoPlayer) videoPlayer.style.display = nodeInfo.file ? 'block' : 'none';
         if (audioPlayer) audioPlayer.style.display = 'none';
     }
-}
-    
-    // 交换DOM元素
-    const nodesList = document.getElementById('videoNodesList');
-    const currentNode = videoNodes[nodeIndex].element;
-    const swapNode = videoNodes[swapIndex].element;
-    
-    if (direction === 'up') {
-        nodesList.insertBefore(currentNode, swapNode);
-    } else {
-        nodesList.insertBefore(swapNode, currentNode);
-    }
-    
-    // 交换数组中的位置
-    [videoNodes[nodeIndex], videoNodes[swapIndex]] = [videoNodes[swapIndex], videoNodes[nodeIndex]];
-    
-    // 更新节点标题
-    updateNodeNumbers();
 }
 
 // 更新节点编号
@@ -605,6 +570,23 @@ function resetMergeMode() {
     
     // 重置表单
     document.getElementById('mergeConfigForm').reset();
+}
+
+// 更新所有视频选择下拉框
+function updateAllVideoSelects() {
+    // 这个函数用于更新视频节点中的选择列表
+    // 目前为空实现，可以根据需要添加功能
+}
+
+// 显示Toast消息
+function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `toast ${type} show`;
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
 }
 
 // 初始化应用
