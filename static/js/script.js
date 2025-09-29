@@ -134,15 +134,26 @@ function bindNodeEvents(nodeInfo) {
     const nodeElement = nodeInfo.element;
     
     // 文件上传事件
-    const fileUpload = nodeElement.querySelector(`#videoUpload_${nodeId}`);
+    const videoFileUpload = nodeElement.querySelector(`#videoUpload_${nodeId}`);
+    const audioFileUpload = nodeElement.querySelector(`#audioUpload_${nodeId}`);
     const fileNameSpan = nodeElement.querySelector(`#fileName_${nodeId}`);
-    const uploadButton = nodeElement.querySelector('.btn-upload');
-    const nodeTypeSelect = nodeElement.querySelector(`.node-type-select`);
+    const videoUploadButton = nodeElement.querySelector('.video-upload-btn');
+    const audioUploadButton = nodeElement.querySelector('.audio-upload-btn');
+    const nodeTypeSelect = nodeElement.querySelector('.node-type');
     
-    // 点击按钮触发文件选择
-    uploadButton.addEventListener('click', function() {
-        fileUpload.click();
-    });
+    // 视频上传按钮点击事件
+    if (videoUploadButton) {
+        videoUploadButton.addEventListener('click', function() {
+            videoFileUpload.click();
+        });
+    }
+    
+    // 音频上传按钮点击事件
+    if (audioUploadButton) {
+        audioUploadButton.addEventListener('click', function() {
+            audioFileUpload.click();
+        });
+    }
     
     // 节点类型变更事件
     if (nodeTypeSelect) {
@@ -158,29 +169,63 @@ function bindNodeEvents(nodeInfo) {
         });
     }
     
-    // 文件选择变化事件
-    fileUpload.addEventListener('change', function() {
-        if (this.files.length > 0) {
-            const file = this.files[0];
-            fileNameSpan.textContent = file.name;
-            nodeInfo.file = file;
-            
-            // 根据文件类型自动设置节点类型
-            if (file.type.startsWith('audio/') && nodeTypeSelect) {
-                nodeTypeSelect.value = 'audio';
-                nodeInfo.type = 'audio';
-            } else if (file.type.startsWith('video/') && nodeTypeSelect) {
-                nodeTypeSelect.value = 'video';
-                nodeInfo.type = 'video';
+    // 视频文件选择变化事件
+    if (videoFileUpload) {
+        videoFileUpload.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                const file = this.files[0];
+                fileNameSpan.textContent = file.name;
+                fileNameSpan.classList.add('has-file');
+                nodeInfo.file = file;
+                
+                // 自动设置节点类型为视频
+                if (nodeTypeSelect) {
+                    nodeTypeSelect.value = 'video';
+                    nodeInfo.type = 'video';
+                }
+                
+                // 清空音频文件选择
+                if (audioFileUpload) {
+                    audioFileUpload.value = '';
+                }
+                
+                // 更新文件预览
+                updateFilePreview(nodeInfo);
+                
+                // 更新合并按钮状态
+                updateMergeButtonState();
             }
-            
-            // 更新文件预览
-            updateFilePreview(nodeInfo);
-            
-            // 更新合并按钮状态
-            updateMergeButtonState();
-        }
-    });
+        });
+    }
+    
+    // 音频文件选择变化事件
+    if (audioFileUpload) {
+        audioFileUpload.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                const file = this.files[0];
+                fileNameSpan.textContent = file.name;
+                fileNameSpan.classList.add('has-file');
+                nodeInfo.file = file;
+                
+                // 自动设置节点类型为音频
+                if (nodeTypeSelect) {
+                    nodeTypeSelect.value = 'audio';
+                    nodeInfo.type = 'audio';
+                }
+                
+                // 清空视频文件选择
+                if (videoFileUpload) {
+                    videoFileUpload.value = '';
+                }
+                
+                // 更新文件预览
+                updateFilePreview(nodeInfo);
+                
+                // 更新合并按钮状态
+                updateMergeButtonState();
+            }
+        });
+    }
     
     // 上移按钮
     nodeElement.querySelector('.btn-move-up').addEventListener('click', function() {
@@ -589,7 +634,569 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
-// 初始化应用
+// 初始化首尾帧上传功能
+function initializeFirstLastUpload() {
+    // 首帧上传
+    const startFrameUploadArea = document.getElementById('startFrameUploadArea');
+    const startFrameInput = document.getElementById('startFrameInput');
+    const startFramePreview = document.getElementById('startFramePreview');
+    
+    // 尾帧上传
+    const endFrameUploadArea = document.getElementById('endFrameUploadArea');
+    const endFrameInput = document.getElementById('endFrameInput');
+    const endFramePreview = document.getElementById('endFramePreview');
+    
+    // 生成按钮和清空按钮
+    const generateButton = document.getElementById('generateFirstLastVideo');
+    const clearButton = document.getElementById('clearFirstLastImages');
+    
+    if (startFrameUploadArea && startFrameInput) {
+        // 首帧上传区域点击事件
+        startFrameUploadArea.addEventListener('click', function() {
+            startFrameInput.click();
+        });
+        
+        // 首帧文件选择事件
+        startFrameInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                const file = this.files[0];
+                handleImagePreview(file, startFramePreview, 'start');
+                updateFirstLastButtonState();
+            }
+        });
+        
+        // 首帧拖拽上传
+        startFrameUploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('drag-over');
+        });
+        
+        startFrameUploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+        });
+        
+        startFrameUploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                startFrameInput.files = files;
+                handleImagePreview(files[0], startFramePreview, 'start');
+                updateFirstLastButtonState();
+            }
+        });
+    }
+    
+    if (endFrameUploadArea && endFrameInput) {
+        // 尾帧上传区域点击事件
+        endFrameUploadArea.addEventListener('click', function() {
+            endFrameInput.click();
+        });
+        
+        // 尾帧文件选择事件
+        endFrameInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                const file = this.files[0];
+                handleImagePreview(file, endFramePreview, 'end');
+                updateFirstLastButtonState();
+            }
+        });
+        
+        // 尾帧拖拽上传
+        endFrameUploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('drag-over');
+        });
+        
+        endFrameUploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+        });
+        
+        endFrameUploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                endFrameInput.files = files;
+                handleImagePreview(files[0], endFramePreview, 'end');
+                updateFirstLastButtonState();
+            }
+        });
+    }
+    
+    // 清空图片按钮
+    if (clearButton) {
+        clearButton.addEventListener('click', function() {
+            // 清空文件输入
+            if (startFrameInput) startFrameInput.value = '';
+            if (endFrameInput) endFrameInput.value = '';
+            
+            // 清空预览
+            if (startFramePreview) startFramePreview.innerHTML = '';
+            if (endFramePreview) endFramePreview.innerHTML = '';
+            
+            // 更新按钮状态
+            updateFirstLastButtonState();
+            
+            showToast('图片已清空', 'info');
+        });
+    }
+    
+    // 生成视频按钮
+    if (generateButton) {
+        generateButton.addEventListener('click', function() {
+            generateFirstLastVideo();
+        });
+    }
+}
+
+// 处理图片预览
+function handleImagePreview(file, previewElement, type) {
+    if (!file || !previewElement) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        previewElement.innerHTML = `
+            <img src="${e.target.result}" alt="${type} frame preview" style="max-width: 100%; max-height: 200px; border-radius: 4px;">
+            <p class="file-name">${file.name}</p>
+        `;
+    };
+    reader.readAsDataURL(file);
+}
+
+// 更新首尾帧生成按钮状态
+function updateFirstLastButtonState() {
+    const generateButton = document.getElementById('generateFirstLastVideo');
+    const startFrameInput = document.getElementById('startFrameInput');
+    
+    if (generateButton && startFrameInput) {
+        // 至少需要首帧才能生成
+        const hasStartFrame = startFrameInput.files && startFrameInput.files.length > 0;
+        generateButton.disabled = !hasStartFrame;
+    }
+}
+
+// 生成首尾帧视频
+async function generateFirstLastVideo() {
+    const startFrameInput = document.getElementById('startFrameInput');
+    const endFrameInput = document.getElementById('endFrameInput');
+    const form = document.getElementById('firstLastConfigForm');
+    
+    if (!startFrameInput || !startFrameInput.files || startFrameInput.files.length === 0) {
+        showToast('请先上传首帧图片', 'error');
+        return;
+    }
+    
+    try {
+        // 显示进度
+        const progressSection = document.getElementById('firstLastTaskProgress');
+        if (progressSection) {
+            progressSection.style.display = 'block';
+        }
+        
+        // 1. 先上传图片
+        const formData = new FormData();
+        formData.append('first_frame', startFrameInput.files[0]);
+        
+        if (endFrameInput && endFrameInput.files && endFrameInput.files.length > 0) {
+            formData.append('last_frame', endFrameInput.files[0]);
+        }
+        
+        showToast('正在上传图片...', 'info');
+        
+        const uploadResponse = await fetch('/upload_firstlast', {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!uploadResponse.ok) {
+            throw new Error('图片上传失败');
+        }
+        
+        const uploadResult = await uploadResponse.json();
+        if (!uploadResult.success) {
+            throw new Error(uploadResult.error || '图片上传失败');
+        }
+        
+        showToast('图片上传成功，开始生成视频...', 'success');
+        
+        // 2. 生成视频
+        const formData2 = new FormData(form);
+        
+        // 将FormData转换为JSON对象
+        const jsonData = {};
+        for (let [key, value] of formData2.entries()) {
+            jsonData[key] = value;
+        }
+        
+        const generateResponse = await fetch('/generate_firstlast', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(jsonData)
+        });
+        
+        if (!generateResponse.ok) {
+            throw new Error('视频生成请求失败');
+        }
+        
+        const generateResult = await generateResponse.json();
+        if (!generateResult.success) {
+            throw new Error(generateResult.error || '视频生成失败');
+        }
+        
+        showToast('视频生成任务已提交，请等待处理完成...', 'success');
+        
+        // 3. 轮询任务状态
+        if (generateResult.task_id) {
+            pollFirstLastTaskStatus(generateResult.task_id);
+        }
+        
+    } catch (error) {
+        console.error('生成视频失败:', error);
+        showToast('生成视频失败: ' + error.message, 'error');
+    }
+}
+
+// 轮询首尾帧任务状态
+function pollFirstLastTaskStatus(taskId) {
+    const pollInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`/task_status/${taskId}`);
+            if (!response.ok) {
+                throw new Error('获取任务状态失败');
+            }
+            
+            const result = await response.json();
+            
+            if (result.status === 'completed') {
+                clearInterval(pollInterval);
+                showToast('视频生成完成！', 'success');
+                
+                // 显示结果
+                const resultSection = document.getElementById('firstLastResultSection');
+                const resultVideo = document.getElementById('firstLastResultVideo');
+                const downloadLink = document.getElementById('firstLastDownloadLink');
+                
+                if (result.video_url && resultSection && resultVideo && downloadLink) {
+                    resultVideo.src = result.video_url;
+                    resultVideo.style.display = 'block';
+                    downloadLink.href = result.video_url;
+                    downloadLink.style.display = 'inline-block';
+                    resultSection.style.display = 'block';
+                }
+                
+            } else if (result.status === 'failed') {
+                clearInterval(pollInterval);
+                showToast('视频生成失败: ' + (result.error || '未知错误'), 'error');
+            } else {
+                // 任务仍在进行中
+                showToast(`任务进行中: ${result.status}`, 'info');
+            }
+            
+        } catch (error) {
+            console.error('轮询任务状态失败:', error);
+            clearInterval(pollInterval);
+            showToast('获取任务状态失败', 'error');
+        }
+    }, 3000); // 每3秒轮询一次
+}
+
+// ... existing code ...
+
+// 初始化参考图上传功能
+function initializeReferenceUpload() {
+    // 参考图上传区域和输入框
+    const referenceUploads = [
+        { area: 'ref1UploadArea', input: 'ref1Input', preview: 'ref1Preview' },
+        { area: 'ref2UploadArea', input: 'ref2Input', preview: 'ref2Preview' },
+        { area: 'ref3UploadArea', input: 'ref3Input', preview: 'ref3Preview' },
+        { area: 'ref4UploadArea', input: 'ref4Input', preview: 'ref4Preview' }
+    ];
+
+    // 为每个参考图上传区域绑定事件
+    referenceUploads.forEach(upload => {
+        const uploadArea = document.getElementById(upload.area);
+        const fileInput = document.getElementById(upload.input);
+        const previewElement = document.getElementById(upload.preview);
+
+        if (!uploadArea || !fileInput || !previewElement) return;
+
+        // 点击上传区域触发文件选择
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // 拖拽上传
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                fileInput.files = files;
+                handleReferenceImagePreview(files[0], previewElement, upload.area);
+                updateReferenceButtonState();
+            }
+        });
+
+        // 文件选择变化事件
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                handleReferenceImagePreview(file, previewElement, upload.area);
+                updateReferenceButtonState();
+            }
+        });
+    });
+
+    // 清空参考图按钮
+    const clearButton = document.getElementById('clearReferenceImages');
+    if (clearButton) {
+        clearButton.addEventListener('click', () => {
+            referenceUploads.forEach(upload => {
+                const fileInput = document.getElementById(upload.input);
+                const previewElement = document.getElementById(upload.preview);
+                const uploadArea = document.getElementById(upload.area);
+                
+                if (fileInput) fileInput.value = '';
+                if (previewElement) previewElement.innerHTML = '';
+                if (uploadArea) uploadArea.classList.remove('has-file');
+            });
+            updateReferenceButtonState();
+        });
+    }
+
+    // 生成参考图视频按钮
+    const generateButton = document.getElementById('generateReferenceVideo');
+    if (generateButton) {
+        generateButton.addEventListener('click', generateReferenceVideo);
+    }
+}
+
+// 处理参考图预览
+function handleReferenceImagePreview(file, previewElement, uploadAreaId) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        previewElement.innerHTML = `
+            <img src="${e.target.result}" alt="参考图预览" style="max-width: 100%; max-height: 200px; border-radius: 8px;">
+        `;
+        
+        // 添加已上传样式
+        const uploadArea = document.getElementById(uploadAreaId);
+        if (uploadArea) {
+            uploadArea.classList.add('has-file');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+// 更新参考图生成按钮状态
+function updateReferenceButtonState() {
+    const generateButton = document.getElementById('generateReferenceVideo');
+    if (!generateButton) return;
+
+    // 检查是否至少有一张参考图
+    const hasAnyImage = ['ref1Input', 'ref2Input', 'ref3Input', 'ref4Input'].some(inputId => {
+        const input = document.getElementById(inputId);
+        return input && input.files && input.files.length > 0;
+    });
+
+    generateButton.disabled = !hasAnyImage;
+}
+
+// 生成参考图视频
+async function generateReferenceVideo() {
+    try {
+        // 显示进度区域
+        const progressSection = document.getElementById('referenceTaskProgress');
+        if (progressSection) {
+            progressSection.style.display = 'block';
+        }
+
+        // 更新步骤状态
+        updateReferenceStepStatus('reference-step-upload', 'processing');
+
+        // 收集参考图文件
+        const formData = new FormData();
+        const referenceInputs = ['ref1Input', 'ref2Input', 'ref3Input', 'ref4Input'];
+        let uploadedCount = 0;
+
+        referenceInputs.forEach(inputId => {
+            const input = document.getElementById(inputId);
+            if (input && input.files && input.files.length > 0) {
+                formData.append('reference_images', input.files[0]);
+                uploadedCount++;
+            }
+        });
+
+        if (uploadedCount === 0) {
+            showToast('请至少上传一张参考图', 'error');
+            return;
+        }
+
+        // 上传参考图
+        const uploadResponse = await fetch('/upload_reference', {
+            method: 'POST',
+            body: formData
+        });
+
+        const uploadData = await uploadResponse.json();
+        if (!uploadData.success) {
+            throw new Error(uploadData.error || '上传参考图失败');
+        }
+
+        updateReferenceStepStatus('reference-step-upload', 'completed');
+        updateReferenceStepStatus('reference-step-task', 'processing');
+
+        // 获取配置参数
+        const configForm = document.getElementById('referenceConfigForm');
+        const formDataConfig = new FormData(configForm);
+        const config = Object.fromEntries(formDataConfig.entries());
+
+        // 生成视频
+        const generateResponse = await fetch('/generate_reference', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(config)
+        });
+
+        const generateData = await generateResponse.json();
+        if (!generateData.success) {
+            throw new Error(generateData.error || '生成视频失败');
+        }
+
+        updateReferenceStepStatus('reference-step-task', 'completed');
+        updateReferenceStepStatus('reference-step-generating', 'processing');
+
+        // 显示任务ID
+        const taskIdDisplay = document.getElementById('reference-task-id-display');
+        if (taskIdDisplay) {
+            taskIdDisplay.textContent = `任务ID: ${generateData.task_id}`;
+        }
+
+        // 开始轮询任务状态
+        pollReferenceTaskStatus(generateData.task_id);
+
+    } catch (error) {
+        console.error('生成参考图视频失败:', error);
+        showToast('生成视频失败: ' + error.message, 'error');
+        
+        // 重置步骤状态
+        updateReferenceStepStatus('reference-step-upload', 'error');
+        updateReferenceStepStatus('reference-step-task', 'pending');
+        updateReferenceStepStatus('reference-step-generating', 'pending');
+    }
+}
+
+// 轮询参考图任务状态
+function pollReferenceTaskStatus(taskId) {
+    const pollInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`/task_status/${taskId}`);
+            const data = await response.json();
+            
+            if (data.status === 'completed') {
+                clearInterval(pollInterval);
+                updateReferenceStepStatus('reference-step-generating', 'completed');
+                updateReferenceStepStatus('reference-step-completed', 'completed');
+                
+                // 显示结果
+                showReferenceResult(data.video_url, data.download_url);
+                
+            } else if (data.status === 'failed') {
+                clearInterval(pollInterval);
+                updateReferenceStepStatus('reference-step-generating', 'error');
+                showToast('视频生成失败: ' + (data.error || '未知错误'), 'error');
+            }
+            // 继续轮询其他状态
+        } catch (error) {
+            console.error('轮询任务状态失败:', error);
+        }
+    }, 3000); // 每3秒轮询一次
+}
+
+// 更新参考图步骤状态
+function updateReferenceStepStatus(stepId, status) {
+    const stepElement = document.getElementById(stepId);
+    if (!stepElement) return;
+
+    const statusElement = stepElement.querySelector('.step-status');
+    if (!statusElement) return;
+
+    // 移除所有状态类
+    stepElement.classList.remove('pending', 'processing', 'completed', 'error');
+    
+    // 添加新状态类
+    stepElement.classList.add(status);
+    
+    // 更新状态文本
+    const statusTexts = {
+        'pending': '待处理',
+        'processing': '处理中...',
+        'completed': '已完成',
+        'error': '失败'
+    };
+    
+    statusElement.textContent = statusTexts[status] || status;
+}
+
+// 显示参考图生成结果
+function showReferenceResult(videoUrl, downloadUrl) {
+    const resultSection = document.getElementById('referenceResultSection');
+    const resultVideo = document.getElementById('referenceResultVideo');
+    const downloadLink = document.getElementById('referenceDownloadLink');
+    
+    if (resultSection && resultVideo && downloadLink) {
+        resultVideo.src = videoUrl;
+        resultVideo.style.display = 'block';
+        
+        downloadLink.href = downloadUrl;
+        downloadLink.style.display = 'inline-block';
+        
+        resultSection.style.display = 'block';
+        
+        showToast('视频生成成功！', 'success');
+    }
+}
+
+// 生成新的参考图视频
+function generateNewVideo(mode) {
+    if (mode === 'reference') {
+        // 隐藏结果和进度区域
+        const resultSection = document.getElementById('referenceResultSection');
+        const progressSection = document.getElementById('referenceTaskProgress');
+        
+        if (resultSection) resultSection.style.display = 'none';
+        if (progressSection) progressSection.style.display = 'none';
+        
+        // 重置所有步骤状态
+        ['reference-step-upload', 'reference-step-task', 'reference-step-generating', 'reference-step-completed'].forEach(stepId => {
+            updateReferenceStepStatus(stepId, 'pending');
+        });
+        
+        // 清空任务ID显示
+        const taskIdDisplay = document.getElementById('reference-task-id-display');
+        if (taskIdDisplay) {
+            taskIdDisplay.textContent = '等待创建任务ID...';
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // 初始化模式选择按钮
     document.querySelectorAll('.mode-button').forEach(button => {
@@ -601,4 +1208,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化视频合并模式
     initializeMergeMode();
+    
+    // 初始化首尾帧上传功能
+    initializeFirstLastUpload();
+    
+    // 初始化参考图上传功能
+    initializeReferenceUpload();
 });

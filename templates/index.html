@@ -688,17 +688,27 @@
                             </select>
                         </div>
                         <div class="node-video-select">
-                            <label for="videoUpload_{nodeId}">选择文件</label>
+                            <label for="videoUpload_{nodeId}">文件上传</label>
                             <div class="file-upload-wrapper">
-                                <input type="file" id="videoUpload_{nodeId}" class="video-upload" accept="video/*,audio/*">
-                                <button type="button" class="btn-upload">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                        <polyline points="7,10 12,15 17,10"></polyline>
-                                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                                    </svg>
-                                    <span class="upload-text">选择本地视频文件</span>
-                                </button>
+                                <div class="upload-buttons-row">
+                                    <button type="button" class="btn-upload video-upload-btn" data-node-id="{nodeId}" data-type="video">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                                        </svg>
+                                        <span>上传视频文件</span>
+                                    </button>
+                                    <button type="button" class="btn-upload audio-upload-btn" data-node-id="{nodeId}" data-type="audio">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M9 18V5l12-2v13"></path>
+                                            <circle cx="6" cy="18" r="3"></circle>
+                                            <circle cx="18" cy="16" r="3"></circle>
+                                        </svg>
+                                        <span>上传音频文件</span>
+                                    </button>
+                                </div>
+                                <input type="file" id="videoUpload_{nodeId}" class="video-upload" accept="video/*" style="display: none;">
+                                <input type="file" id="audioUpload_{nodeId}" class="audio-upload" accept="audio/*" style="display: none;">
                                 <span class="file-name" id="fileName_{nodeId}">未选择文件</span>
                             </div>
                         </div>

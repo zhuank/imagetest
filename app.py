@@ -38,12 +38,21 @@ MERGE_TASKS_FOLDER = "merge_tasks"
 
 # 辅助函数
 def normalize_ratio(ratio):
-    """将比例值标准化为0-1之间的浮点数"""
+    """将比例值标准化为0-1之间的浮点数，或保持分辨率格式"""
     if isinstance(ratio, str):
-        if ratio.endswith('%'):
+        # 如果是分辨率格式（如 1080x1080, 1920x1080），直接返回
+        if 'x' in ratio and ratio.replace('x', '').replace(' ', '').isdigit():
+            return ratio
+        # 如果是百分比格式
+        elif ratio.endswith('%'):
             return float(ratio.rstrip('%')) / 100
+        # 如果是纯数字字符串
         else:
-            return float(ratio)
+            try:
+                return float(ratio)
+            except ValueError:
+                # 如果无法转换为浮点数，返回原值
+                return ratio
     return float(ratio)
 
 def get_vod_instance(ak, sk, region='cn-north-1'):
@@ -1647,7 +1656,21 @@ def list_merge_videos():
                 videos.append({
                     'name': filename,
                     'path': file_path,
-                    'url': url_for('stream', filename=f'videos/{filename}'),
+                    'url': url_for('stream_video_file', filename=f'videos/{filename}'),
+                    'size': os.path.getsize(file_path),
+                    'created': os.path.getctime(file_path)
+                })
+    
+    # 检查输出文件夹中的视频
+    output_folder = app.config['OUTPUT_FOLDER']
+    if os.path.exists(output_folder):
+        for filename in os.listdir(output_folder):
+            if filename.lower().endswith(tuple(ALLOWED_VIDEO_EXTENSIONS)):
+                file_path = os.path.join(output_folder, filename)
+                videos.append({
+                    'name': filename,
+                    'path': file_path,
+                    'url': url_for('stream_video_file', filename=filename),
                     'size': os.path.getsize(file_path),
                     'created': os.path.getctime(file_path)
                 })
@@ -1656,6 +1679,7 @@ def list_merge_videos():
     videos.sort(key=lambda x: x['created'], reverse=True)
     
     return jsonify({
+        'success': True,
         'videos': videos
     })
 

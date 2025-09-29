@@ -295,10 +295,48 @@ header p {
     background: #f8f9ff;
 }
 
-.upload-area.dragover {
+/* 拖拽上传样式 */
+.upload-area.drag-over {
     border-color: #667eea;
-    background: #e3f2fd;
+    background-color: #f8f9ff;
     transform: scale(1.02);
+}
+
+.upload-area.has-file {
+    border-color: #28a745;
+    background-color: #f8fff9;
+}
+
+.upload-area.has-file .upload-placeholder {
+    opacity: 0.7;
+}
+
+/* 任务步骤状态样式 */
+.task-step.pending .step-status {
+    color: #6c757d;
+    background: #f8f9fa;
+}
+
+.task-step.processing .step-status {
+    color: #007bff;
+    background: #e3f2fd;
+    animation: pulse 1.5s infinite;
+}
+
+.task-step.completed .step-status {
+    color: #28a745;
+    background: #d4edda;
+}
+
+.task-step.error .step-status {
+    color: #dc3545;
+    background: #f8d7da;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
 }
 
 .upload-placeholder {
@@ -705,6 +743,262 @@ footer {
 .task-step.active #task-id-display {
     color: #007bff;
     font-weight: 500;
+}
+
+/* 视频节点样式 */
+.video-node {
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.video-node:hover {
+    border-color: #667eea;
+    box-shadow: 0 4px 16px rgba(102, 126, 234, 0.15);
+    transform: translateY(-2px);
+}
+
+.node-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.node-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.node-title::before {
+    content: "📹";
+    font-size: 1.2rem;
+}
+
+.node-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.node-actions button {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background: #6c757d;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.node-actions button:hover {
+    background: #495057;
+    transform: scale(1.1);
+}
+
+.btn-remove {
+    background: #dc3545 !important;
+}
+
+.btn-remove:hover {
+    background: #c82333 !important;
+}
+
+.node-content {
+    padding: 20px;
+}
+
+.node-type-select {
+    margin-bottom: 20px;
+}
+
+.node-type-select label {
+    display: block;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 8px;
+    font-size: 0.9rem;
+}
+
+.node-type {
+    width: 100%;
+    padding: 10px 15px;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    background: white;
+    transition: border-color 0.3s ease;
+}
+
+.node-type:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.node-video-select {
+    margin-bottom: 20px;
+}
+
+.node-video-select label {
+    display: block;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+}
+
+.file-upload-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.upload-buttons-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.btn-upload {
+    flex: 1;
+    min-width: 140px;
+    padding: 12px 16px;
+    border: 2px dashed #667eea;
+    border-radius: 8px;
+    background: #f8f9ff;
+    color: #667eea;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-upload:hover {
+    background: #667eea;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+.btn-upload.video-upload-btn {
+    border-color: #28a745;
+    background: #f8fff9;
+    color: #28a745;
+}
+
+.btn-upload.video-upload-btn:hover {
+    background: #28a745;
+    color: white;
+}
+
+.btn-upload.audio-upload-btn {
+    border-color: #ffc107;
+    background: #fffdf5;
+    color: #ffc107;
+}
+
+.btn-upload.audio-upload-btn:hover {
+    background: #ffc107;
+    color: #212529;
+}
+
+.video-upload,
+.audio-upload {
+    display: none;
+}
+
+.file-name {
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #6c757d;
+    text-align: center;
+}
+
+.file-name.has-file {
+    background: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+    font-weight: 500;
+}
+
+.node-video-preview {
+    margin-top: 15px;
+}
+
+.node-video-player,
+.node-audio-player {
+    width: 100%;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* 视频节点列表容器 */
+#videoNodesList {
+    max-height: 600px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+#videoNodesList::-webkit-scrollbar {
+    width: 6px;
+}
+
+#videoNodesList::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+#videoNodesList::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+#videoNodesList::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+@media (max-width: 768px) {
+    .upload-buttons-row {
+        flex-direction: column;
+    }
+    
+    .btn-upload {
+        min-width: auto;
+    }
+    
+    .node-header {
+        padding: 12px 15px;
+    }
+    
+    .node-content {
+        padding: 15px;
+    }
+    
+    .node-actions button {
+        width: 28px;
+        height: 28px;
+    }
 }
 
 @media (max-width: 480px) {
