@@ -359,7 +359,6 @@ function updateNodeDisplay(nodeInfo) {
     // 更新节点标题
     updateNodeNumbers();
 }
-}
 
 // 更新节点编号
 function updateNodeNumbers() {
