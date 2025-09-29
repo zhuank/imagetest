@@ -103,8 +103,30 @@ function addVideoNode() {
     nodesList.appendChild(nodeElement);
     
     // 存储节点信息
-    videoNodes.push({
+    const nodeInfo = {
         id: nodeId,
+        element: nodeElement,
+        file: null,
+        type: 'video', // 默认为视频类型
+        url: null
+    };
+    
+    videoNodes.push(nodeInfo);
+    
+    // 绑定事件处理
+    bindNodeEvents(nodeInfo);
+    
+    // 更新节点编号
+    updateNodeNumbers();
+    
+    // 更新合并按钮状态
+    updateMergeButtonState();
+    
+    // 根据当前合并类型更新节点显示
+    updateNodesByMergeType();
+    
+    return nodeInfo;
+}
         element: nodeElement,
         file: null
     });
@@ -116,34 +138,57 @@ function addVideoNode() {
     updateMergeButtonState();
 }
 
-// 设置节点事件
-function setupNodeEvents(nodeId, nodeElement) {
+// 绑定节点事件
+function bindNodeEvents(nodeInfo) {
+    const nodeId = nodeInfo.id;
+    const nodeElement = nodeInfo.element;
+    
     // 文件上传事件
-    const videoUpload = nodeElement.querySelector(`#videoUpload_${nodeId}`);
+    const fileUpload = nodeElement.querySelector(`#videoUpload_${nodeId}`);
     const fileNameSpan = nodeElement.querySelector(`#fileName_${nodeId}`);
     const uploadButton = nodeElement.querySelector('.btn-upload');
+    const nodeTypeSelect = nodeElement.querySelector(`.node-type-select`);
     
     // 点击按钮触发文件选择
     uploadButton.addEventListener('click', function() {
-        videoUpload.click();
+        fileUpload.click();
     });
     
+    // 节点类型变更事件
+    if (nodeTypeSelect) {
+        nodeTypeSelect.addEventListener('change', function() {
+            const nodeType = this.value;
+            nodeInfo.type = nodeType;
+            
+            // 更新节点显示
+            updateNodeDisplay(nodeInfo);
+            
+            // 更新合并按钮状态
+            updateMergeButtonState();
+        });
+    }
+    
     // 文件选择变化事件
-    videoUpload.addEventListener('change', function() {
+    fileUpload.addEventListener('change', function() {
         if (this.files.length > 0) {
             const file = this.files[0];
             fileNameSpan.textContent = file.name;
+            nodeInfo.file = file;
             
-            const nodeIndex = videoNodes.findIndex(node => node.id === nodeId);
-            if (nodeIndex !== -1) {
-                videoNodes[nodeIndex].file = file;
-                
-                // 更新视频预览
-                updateVideoPreviewFromFile(nodeId, file);
-                
-                // 更新合并按钮状态
-                updateMergeButtonState();
+            // 根据文件类型自动设置节点类型
+            if (file.type.startsWith('audio/') && nodeTypeSelect) {
+                nodeTypeSelect.value = 'audio';
+                nodeInfo.type = 'audio';
+            } else if (file.type.startsWith('video/') && nodeTypeSelect) {
+                nodeTypeSelect.value = 'video';
+                nodeInfo.type = 'video';
             }
+            
+            // 更新文件预览
+            updateFilePreview(nodeInfo);
+            
+            // 更新合并按钮状态
+            updateMergeButtonState();
         }
     });
     
@@ -163,38 +208,132 @@ function setupNodeEvents(nodeId, nodeElement) {
     });
 }
 
-// 从文件更新视频预览
-function updateVideoPreviewFromFile(nodeId, file) {
-    const nodeElement = document.querySelector(`.video-node[data-node-id="${nodeId}"]`);
-    if (!nodeElement) return;
+// 更新文件预览
+function updateFilePreview(nodeInfo) {
+    const nodeId = nodeInfo.id;
+    const file = nodeInfo.file;
+    const nodeElement = nodeInfo.element;
+    
+    if (!file) return;
     
     const videoPlayer = nodeElement.querySelector('.node-video-player');
-    if (videoPlayer) {
-        // 创建一个临时URL用于预览
-        const objectURL = URL.createObjectURL(file);
-        videoPlayer.src = objectURL;
-        videoPlayer.style.display = 'block';
-        
-        // 当视频不再需要时，释放URL
-        videoPlayer.onloadeddata = function() {
-            console.log(`视频 ${file.name} 已加载预览`);
-        };
+    const audioPlayer = nodeElement.querySelector('.node-audio-player');
+    
+    // 创建一个临时URL用于预览
+    const objectURL = URL.createObjectURL(file);
+    
+    // 根据文件类型显示不同的预览
+    if (file.type.startsWith('audio/')) {
+        // 音频文件
+        if (audioPlayer) {
+            audioPlayer.src = objectURL;
+            audioPlayer.style.display = 'block';
+            if (videoPlayer) videoPlayer.style.display = 'none';
+        }
+    } else {
+        // 视频文件
+        if (videoPlayer) {
+            videoPlayer.src = objectURL;
+            videoPlayer.style.display = 'block';
+            if (audioPlayer) audioPlayer.style.display = 'none';
+        }
     }
 }
 
-// 移动节点
-function moveNode(nodeId, direction) {
-    const nodeIndex = videoNodes.findIndex(node => node.id === nodeId);
-    if (nodeIndex === -1) return;
+// 根据合并类型更新节点显示
+function updateNodesByMergeType() {
+    const mergeType = document.getElementById('mergeType').value;
     
-    let swapIndex;
-    if (direction === 'up') {
-        if (nodeIndex === 0) return; // 已经是第一个
-        swapIndex = nodeIndex - 1;
-    } else {
-        if (nodeIndex === videoNodes.length - 1) return; // 已经是最后一个
-        swapIndex = nodeIndex + 1;
+    // 获取添加节点按钮
+    const addNodeBtn = document.getElementById('addVideoNodeBtn');
+    
+    // 根据合并类型设置节点限制和显示
+    switch (mergeType) {
+        case 'video_only':
+            // 仅视频合并模式 - 允许多个视频节点
+            addNodeBtn.style.display = 'block';
+            
+            // 所有节点都是视频类型
+            videoNodes.forEach(node => {
+                const nodeTypeSelect = node.element.querySelector('.node-type-select');
+                if (nodeTypeSelect) {
+                    nodeTypeSelect.value = 'video';
+                    nodeTypeSelect.disabled = true;
+                    node.type = 'video';
+                }
+                updateNodeDisplay(node);
+            });
+            break;
+            
+        case 'audio_video':
+            // 音频与视频合并模式 - 限制为一个音频和一个视频
+            if (videoNodes.length >= 2) {
+                addNodeBtn.style.display = 'none';
+            } else {
+                addNodeBtn.style.display = 'block';
+            }
+            
+            // 如果有两个节点，确保一个是音频一个是视频
+            if (videoNodes.length === 2) {
+                const firstNodeTypeSelect = videoNodes[0].element.querySelector('.node-type-select');
+                const secondNodeTypeSelect = videoNodes[1].element.querySelector('.node-type-select');
+                
+                if (firstNodeTypeSelect && secondNodeTypeSelect) {
+                    if (firstNodeTypeSelect.value === secondNodeTypeSelect.value) {
+                        // 如果两个节点类型相同，将第二个节点设置为不同类型
+                        secondNodeTypeSelect.value = firstNodeTypeSelect.value === 'video' ? 'audio' : 'video';
+                        videoNodes[1].type = secondNodeTypeSelect.value;
+                    }
+                }
+            }
+            
+            // 启用节点类型选择
+            videoNodes.forEach(node => {
+                const nodeTypeSelect = node.element.querySelector('.node-type-select');
+                if (nodeTypeSelect) {
+                    nodeTypeSelect.disabled = false;
+                }
+                updateNodeDisplay(node);
+            });
+            break;
+            
+        case 'multiple_videos':
+            // 多个视频合并模式 - 允许多个视频节点
+            addNodeBtn.style.display = 'block';
+            
+            // 所有节点都是视频类型
+            videoNodes.forEach(node => {
+                const nodeTypeSelect = node.element.querySelector('.node-type-select');
+                if (nodeTypeSelect) {
+                    nodeTypeSelect.value = 'video';
+                    nodeTypeSelect.disabled = true;
+                    node.type = 'video';
+                }
+                updateNodeDisplay(node);
+            });
+            break;
     }
+    
+    // 更新合并按钮状态
+    updateMergeButtonState();
+}
+
+// 更新节点显示
+function updateNodeDisplay(nodeInfo) {
+    const nodeElement = nodeInfo.element;
+    const videoPlayer = nodeElement.querySelector('.node-video-player');
+    const audioPlayer = nodeElement.querySelector('.node-audio-player');
+    
+    if (nodeInfo.type === 'audio') {
+        // 音频模式
+        if (audioPlayer) audioPlayer.style.display = nodeInfo.file ? 'block' : 'none';
+        if (videoPlayer) videoPlayer.style.display = 'none';
+    } else {
+        // 视频模式
+        if (videoPlayer) videoPlayer.style.display = nodeInfo.file ? 'block' : 'none';
+        if (audioPlayer) audioPlayer.style.display = 'none';
+    }
+}
     
     // 交换DOM元素
     const nodesList = document.getElementById('videoNodesList');
@@ -318,6 +457,11 @@ async function mergeVideos() {
     formData.append('output_format', outputFormat);
     formData.append('api_key', apiKey);
     
+    // 添加合并引擎选择（火山引擎集成）
+    const mergeEngine = configForm.elements['mergeEngine'] ? 
+        configForm.elements['mergeEngine'].value : 'default';
+    formData.append('engine', mergeEngine);
+    
     // 添加视频文件
     let hasFiles = false;
     videoNodes.forEach((node, index) => {
@@ -353,7 +497,8 @@ async function mergeVideos() {
                     video_ids: videoIds,
                     output_name: outputName,
                     output_format: outputFormat,
-                    api_key: apiKey
+                    api_key: apiKey,
+                    engine: mergeEngine
                 })
             });
         }
@@ -384,16 +529,22 @@ async function pollMergeStatus(taskId) {
         const response = await fetch(`/merge_task_status/${taskId}`);
         const result = await response.json();
         
+        // 更新进度条（如果有进度信息）
+        if (result.progress !== undefined) {
+            const progressPercent = Math.min(Math.max(result.progress, 0), 100);
+            updateMergeProgress(progressPercent);
+        }
+        
         if (result.status === 'completed') {
             // 更新状态
             updateMergeStepStatus('merge-process-status', '完成');
             updateMergeStepStatus('merge-complete-status', '完成');
             
             // 显示结果
-            showMergeResult(result.video_url, result.download_url);
+            showMergeResult(result.output_url || result.video_url, result.output_url || result.download_url);
         } else if (result.status === 'failed') {
             updateMergeStepStatus('merge-process-status', '失败');
-            showToast('视频合并失败: ' + result.error, 'error');
+            showToast('视频合并失败: ' + (result.error || '未知错误'), 'error');
         } else {
             // 继续轮询
             setTimeout(() => pollMergeStatus(taskId), 2000);

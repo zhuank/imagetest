@@ -538,6 +538,23 @@
                                         <option value="webm">WebM</option>
                                     </select>
                                 </div>
+                                
+                                <div class="form-group">
+                                    <label for="mergeEngine">合并引擎</label>
+                                    <select id="mergeEngine" name="mergeEngine">
+                                        <option value="default" selected>默认引擎</option>
+                                        <option value="vod">火山引擎视频点播</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="form-group">
+                                    <label for="mergeType">合并类型</label>
+                                    <select id="mergeType" name="mergeType">
+                                        <option value="videos_only" selected>仅视频合并</option>
+                                        <option value="audio_video">音频与视频合并</option>
+                                        <option value="multiple_videos">多个视频合并</option>
+                                    </select>
+                                </div>
                             </div>
                         </form>
                     </div>
@@ -663,17 +680,24 @@
                         </div>
                     </div>
                     <div class="node-content">
+                        <div class="node-type-select">
+                            <label for="nodeType_{nodeId}">节点类型</label>
+                            <select id="nodeType_{nodeId}" class="node-type">
+                                <option value="video" selected>视频</option>
+                                <option value="audio">音频</option>
+                            </select>
+                        </div>
                         <div class="node-video-select">
-                            <label for="videoUpload_{nodeId}">选择视频</label>
+                            <label for="videoUpload_{nodeId}">选择文件</label>
                             <div class="file-upload-wrapper">
-                                <input type="file" id="videoUpload_{nodeId}" class="video-upload" accept="video/*">
+                                <input type="file" id="videoUpload_{nodeId}" class="video-upload" accept="video/*,audio/*">
                                 <button type="button" class="btn-upload">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                         <polyline points="7,10 12,15 17,10"></polyline>
                                         <line x1="12" y1="15" x2="12" y2="3"></line>
                                     </svg>
-                                    选择本地视频文件
+                                    <span class="upload-text">选择本地视频文件</span>
                                 </button>
                                 <span class="file-name" id="fileName_{nodeId}">未选择文件</span>
                             </div>
@@ -681,6 +705,14 @@
                         <div class="node-video-preview">
                             <video class="node-video-player" controls style="display: none;">
                                 您的浏览器不支持视频播放。
+                            </video>
+                            <audio class="node-audio-player" controls style="display: none;">
+                                您的浏览器不支持音频播放。
+                            </audio>
+                        </div>
+                    </div>
+                </div>
+            </template>
                             </video>
                         </div>
                     </div>

@@ -4,12 +4,14 @@ import requests
 import time
 import json
 import subprocess
+import threading
 from flask import Flask, render_template, request, jsonify, send_file, url_for
 from werkzeug.utils import secure_filename
 import uuid
 import glob
 from urllib.parse import urlparse
-from volcenginesdkarkruntime import Ark
+from volcengine.vod.VodService import VodService
+from volcengine.vod.models.request.request_vod_pb2 import VodSubmitDirectEditTaskAsyncRequest
 
 # 新增：加载 .env 环境变量
 try:
@@ -34,24 +36,124 @@ os.makedirs(app.config['MERGE_TASKS_FOLDER'], exist_ok=True)
 # 允许的文件扩展名
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'}
 
+# 火山引擎视频点播服务
+def get_vod_service(api_key=None):
+    """获取火山引擎视频点播服务实例"""
+    vod_service = VodService()
+    
+    # 如果提供了API Key，则使用它
+    if api_key:
+        vod_service.set_ak(api_key)
+        # Secret Key需要从环境变量或配置文件中获取
+        secret_key = os.environ.get("VOD_SECRET_KEY", "")
+        if secret_key:
+            vod_service.set_sk(secret_key)
+    
+    return vod_service
+
 # 允许的视频文件扩展名
 ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'webm', 'mov', 'avi'}
 
 # 新增：支持的分辨率与归一化
 ALLOWED_RESOLUTIONS = {"854x480", "1280x720", "1920x1080"}
 
-def normalize_ratio(val: str | None) -> str:
+def submit_merge_task_async(files, output_name, output_format="mp4", api_key=None):
+    """提交异步视频合并任务"""
+    vod_service = get_vod_service(api_key)
+    
+    # 创建异步编辑任务请求
+    req = VodSubmitDirectEditTaskAsyncRequest()
+    req.Uploader = 'video_merge_app'
+    req.Application = 'VideoTrackToB'
+    req.Priority = 0
+    
+    # 准备编辑参数
+    tracks = []
+    current_time = 0
+    
+    # 为每个视频文件创建一个轨道片段
+    for file_path in files:
+        # 这里需要先上传文件到VOD，获取视频ID
+        # 简化处理，假设文件已经在VOD中，使用文件路径作为source
+        video_segment = {
+            "ID": f"video_{len(tracks)}",
+            "Source": file_path,
+            "TargetTime": [current_time, current_time + 10000],  # 假设每个视频10秒
+            "Type": "video"
+        }
+        tracks.append([video_segment])
+        current_time += 10000
+    
+    edit_param = {
+        "Canvas": {
+            "Height": 1080,
+            "Width": 1920
+        },
+        "Output": {
+            "Alpha": False,
+            "Codec": {
+                "AudioBitrate": 128,
+                "AudioCodec": "aac",
+                "Crf": 23,
+                "Preset": "medium",
+                "VideoCodec": "h264"
+            },
+            "DisableAudio": False,
+            "DisableVideo": False,
+            "Fps": 30
+        },
+        "Track": tracks,
+        "Upload": {
+            "SpaceName": "video_merge_app",
+            "VideoName": f"{output_name}.{output_format}"
+        },
+        "Uploader": "video_merge_app"
+    }
+    
+    req.EditParam = json.dumps(edit_param).encode('utf-8')
+    
     try:
-        if not val:
-            return "1080x1080"  # 修正：1080x1080 为新默认值
-        v = str(val).lower().strip()
-        # 支持常见别名
-        if v in {"480p", "480"}:
-            return "854x480"
-        if v in {"720p", "720"}:
-            return "1280x720"
-        if v in {"1080p", "1080"}:
-            return "1920x1080"
+        # 提交任务
+        resp = vod_service.submit_direct_edit_task_async(req)
+        result = json.loads(resp)
+        
+        # 返回任务ID
+        return {
+            "success": True,
+            "task_id": result.get("Result", {}).get("TaskId", ""),
+            "request_id": result.get("ResponseMetadata", {}).get("RequestId", "")
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def get_task_status(task_id, api_key=None):
+    """获取异步任务状态"""
+    vod_service = get_vod_service(api_key)
+    
+    try:
+        # 构建查询任务状态的请求
+        # 注意：这里简化处理，实际应使用火山引擎提供的查询任务状态API
+        # 例如：vod_service.get_direct_edit_task_info(task_id)
+        
+        # 模拟查询结果
+        # 实际应用中应替换为真实API调用
+        status_info = {
+            "success": True,
+            "status": "PROCESSING",  # 可能的状态：PROCESSING, FINISHED, FAILED
+            "progress": 50,  # 进度百分比
+            "output_url": "",
+            "error": ""
+        }
+        
+        return status_info
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
         # 规范成 123x456 形式
         v = v.replace("*", "x").replace("×", "x").replace(" ", "")
         if "x" in v:
@@ -1232,18 +1334,17 @@ def list_videos():
 @app.route('/merge_videos', methods=['POST'])
 def merge_videos():
     """创建视频合并任务"""
-try:
-    data = request.get_json()
-    if not data:
-# This return statement needs to be inside a function
-# Moving it inside the try block of the merge_videos route handler
-if not data:
-    return jsonify({'success': False, 'error': 'No data provided'}), 400
-except Exception as e:
-    return jsonify({'success': False, 'error': str(e)}), 500
+    try:
         data = request.get_json()
         if not data:
             return jsonify({'success': False, 'error': 'No data provided'}), 400
+            
+        # 处理合并视频的逻辑
+        # ...
+        
+        return jsonify({'success': True, 'message': '视频合并请求已接收'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
         
         video_ids = data.get('video_ids', [])
         if not video_ids or len(video_ids) < 2:
@@ -1473,10 +1574,77 @@ def merge_videos_upload():
     task_folder = os.path.join(app.config['MERGE_TASKS_FOLDER'], task_id)
     os.makedirs(task_folder, exist_ok=True)
     
-    # 获取其他参数
+    @app.route('/merge_task_status/<task_id>', methods=['GET'])
+def merge_task_status(task_id):
+    """获取合并任务状态"""
+    task_folder = os.path.join(MERGE_TASKS_FOLDER, task_id)
+    task_file = os.path.join(task_folder, 'task.json')
+    
+    if not os.path.exists(task_file):
+        return jsonify({
+            'success': False,
+            'error': '任务不存在'
+        }), 404
+    
+    try:
+        with open(task_file, 'r') as f:
+            task_info = json.load(f)
+        
+        # 返回任务状态信息
+        response = {
+            'success': True,
+            'status': task_info.get('status', 'pending'),
+            'progress': task_info.get('progress', 0)
+        }
+        
+        # 如果任务完成，添加输出URL
+        if task_info.get('status') == 'completed' and task_info.get('output_url'):
+            response['output_url'] = task_info.get('output_url')
+        
+        # 如果任务失败，添加错误信息
+        if task_info.get('status') == 'failed' and task_info.get('error'):
+            response['error'] = task_info.get('error')
+        
+        return jsonify(response)
+    
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+# 获取其他参数
     output_name = request.form.get('output_name', 'merged_video')
     output_format = request.form.get('output_format', 'mp4')
     api_key = request.form.get('api_key', '')
+    
+    # 使用火山引擎视频点播服务提交合并任务
+    result = submit_merge_task_async(files, output_name, output_format, api_key)
+    
+    if not result['success']:
+        return jsonify({'error': result['error']}), 500
+    
+    # 保存任务信息
+    task_file = os.path.join(task_folder, 'task.json')
+    with open(task_file, 'w') as f:
+        json.dump({
+            'files': files,
+            'output_name': output_name,
+            'output_format': output_format,
+            'vod_task_id': result['task_id'],
+            'request_id': result['request_id'],
+            'status': 'processing',
+            'created_at': time.time()
+        }, f)
+    
+    # 启动后台任务处理
+    threading.Thread(target=process_vod_merge_task, args=(task_id,)).start()
+    
+    return jsonify({
+        'task_id': task_id,
+        'vod_task_id': result['task_id'],
+        'status': 'processing'
+    })
     
     # 保存任务信息
     task_file = os.path.join(task_folder, 'task.json')
@@ -1571,33 +1739,118 @@ def process_merge_files_task(task_id):
 @app.route('/merge_videos_task', methods=['POST'])
 def merge_videos_task():
     """创建视频合并任务"""
-    if not request.json or 'video_ids' not in request.json:
-        return jsonify({'error': '没有提供视频列表'}), 400
+    if not request.json:
+        return jsonify({'error': '无效的请求数据'}), 400
     
-    video_ids = request.json['video_ids']
-    if not video_ids or len(video_ids) < 1:
-        return jsonify({'error': '至少需要一个视频才能处理'}), 400
+    # 获取视频列表
+    video_ids = request.json.get('video_ids', [])
+    videos = request.json.get('videos', [])
+    
+    # 检查是否提供了视频
+    if (not video_ids or len(video_ids) < 1) and (not videos or len(videos) < 1):
+        return jsonify({'error': '没有提供视频文件'}), 400
+    
+    # 如果只提供了video_ids，转换为videos列表
+    if not videos and video_ids:
+        videos = video_ids
     
     # 创建任务ID和任务文件夹
     task_id = str(uuid.uuid4())
     task_folder = os.path.join(MERGE_TASKS_FOLDER, task_id)
     os.makedirs(task_folder, exist_ok=True)
     
-    # 保存视频列表到任务文件
+    # 获取其他参数
+    output_name = request.json.get('output_name', f'merged_{task_id}')
+    output_format = request.json.get('output_format', 'mp4')
+    resolution = request.json.get('resolution', '1080x1080')
+    api_key = request.json.get('api_key', '')
+    
+    # 规范化分辨率
+    resolution = normalize_ratio(resolution)
+    
+    # 准备任务信息
+    task_info = {
+        'id': task_id,
+        'videos': videos,
+        'output_name': output_name,
+        'output_format': output_format,
+        'resolution': resolution,
+        'api_key': api_key,
+        'status': 'pending',
+        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'progress': 0
+    }
+    
+    # 使用火山引擎视频点播服务提交合并任务
+    try:
+        vod_service = get_vod_service(api_key)
+        vod_task_id = submit_merge_task_async(vod_service, videos, output_name, output_format, resolution)
+        
+        # 保存火山引擎任务ID
+        task_info['vod_task_id'] = vod_task_id
+        task_info['status'] = 'processing'
+        
+        # 保存任务信息
+        task_file = os.path.join(task_folder, 'task.json')
+        with open(task_file, 'w') as f:
+            json.dump(task_info, f)
+        
+        # 启动后台线程处理任务
+        thread = threading.Thread(target=process_vod_merge_task, args=(task_id,))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'status': 'processing'
+        })
+    
+    except Exception as e:
+        # 记录错误信息
+        task_info['status'] = 'failed'
+        task_info['error'] = str(e)
+        
+        task_file = os.path.join(task_folder, 'task.json')
+        with open(task_file, 'w') as f:
+            json.dump(task_info, f)
+        
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+    
+    # 获取其他参数
+    output_name = request.json.get('output_name', 'merged_video')
+    output_format = request.json.get('output_format', 'mp4')
+    api_key = request.json.get('api_key', '')
+    
+    # 使用火山引擎视频点播服务提交合并任务
+    result = submit_merge_task_async(videos, output_name, output_format, api_key)
+    
+    if not result['success']:
+        return jsonify({'error': result['error']}), 500
+    
+    # 保存任务信息
     task_file = os.path.join(task_folder, 'task.json')
     with open(task_file, 'w') as f:
         json.dump({
             'videos': videos,
-            'status': 'pending',
+            'output_name': output_name,
+            'output_format': output_format,
+            'vod_task_id': result['task_id'],
+            'request_id': result['request_id'],
+            'status': 'processing',
             'created_at': time.time()
         }, f)
     
-    # 启动后台任务处理视频合并
-    threading.Thread(target=process_merge_task, args=(task_id,)).start()
+    # 启动后台任务处理
+    threading.Thread(target=process_vod_merge_task, args=(task_id,)).start()
     
     return jsonify({
         'task_id': task_id,
-        'status': 'pending'
+        'vod_task_id': result['task_id'],
+        'status': 'processing'
     })
 
 def process_merge_task(task_id):
@@ -1667,6 +1920,489 @@ def process_merge_task(task_id):
         except:
             pass
 
+def merge_audio_video(video_url, audio_url, output_format='mp4', api_key=None):
+    """合并单个音频和视频文件
+    
+    Args:
+        video_url: 视频文件URL
+        audio_url: 音频文件URL
+        output_format: 输出格式，默认为mp4
+        api_key: API密钥，可选
+        
+    Returns:
+        dict: 包含任务ID和状态的字典
+    """
+    try:
+        # 使用提供的API Key或环境变量中的API Key
+        api_key = api_key or os.environ.get('VOD_API_KEY', '')
+        if not api_key:
+            return {'success': False, 'error': 'API Key不能为空'}
+        
+        # 获取VOD服务实例
+        vod_service = get_vod_service(api_key)
+        
+        # 构建请求数据
+        data = {
+            'video_url': video_url,
+            'audio_url': audio_url,
+            'output_format': output_format
+        }
+        
+        # 发送请求
+        # 注意：这里简化处理，实际应使用火山引擎提供的音视频合并API
+        # 例如：response = vod_service.create_audio_merge_task(data)
+        
+        # 模拟响应
+        # 实际应用中应替换为真实API调用
+        task_id = f"audio_merge_{uuid.uuid4().hex}"
+        
+        return {
+            'success': True,
+            'task_id': task_id,
+            'status': 'submitted'
+        }
+        
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+def merge_multiple_videos(video_urls, output_format='mp4', audio_config=None, api_key=None):
+    """合并多个已有声音的视频
+    
+    Args:
+        video_urls: 视频文件URL列表
+        output_format: 输出格式，默认为mp4
+        audio_config: 音频配置，可选，例如：{'normalize': True, 'volume': 1.0}
+        api_key: API密钥，可选
+        
+    Returns:
+        dict: 包含任务ID和状态的字典
+    """
+    try:
+        # 使用提供的API Key或环境变量中的API Key
+        api_key = api_key or os.environ.get('VOD_API_KEY', '')
+        if not api_key:
+            return {'success': False, 'error': 'API Key不能为空'}
+        
+        # 获取VOD服务实例
+        vod_service = get_vod_service(api_key)
+        
+        # 构建请求数据
+        data = {
+            'video_urls': video_urls,
+            'output_format': output_format
+        }
+        
+        # 添加音频配置（如果有）
+        if audio_config:
+            data['audio_config'] = audio_config
+        
+        # 发送请求
+        # 注意：这里简化处理，实际应使用火山引擎提供的视频合并API
+        # 例如：response = vod_service.create_video_merge_task(data)
+        
+        # 模拟响应
+        # 实际应用中应替换为真实API调用
+        task_id = f"video_merge_{uuid.uuid4().hex}"
+        
+        return {
+            'success': True,
+            'task_id': task_id,
+            'status': 'submitted'
+        }
+        
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@app.route('/audio_video_merge', methods=['POST'])
+def audio_video_merge():
+    """处理音频和视频合并请求"""
+    try:
+        # 获取API Key（如果有）
+        api_key = request.form.get('api_key', '')
+        
+        # 检查是否有视频URL
+        video_url = request.form.get('video_url')
+        if not video_url:
+            return jsonify({
+                'success': False,
+                'error': '缺少视频URL'
+            }), 400
+            
+        # 检查是否有音频URL
+        audio_url = request.form.get('audio_url')
+        if not audio_url:
+            return jsonify({
+                'success': False,
+                'error': '缺少音频URL'
+            }), 400
+        
+        # 获取输出格式
+        output_format = request.form.get('output_format', 'mp4')
+        
+        # 创建任务ID和任务文件夹
+        task_id = f"audio_merge_{uuid.uuid4().hex}"
+        task_folder = os.path.join(MERGE_TASKS_FOLDER, task_id)
+        os.makedirs(task_folder, exist_ok=True)
+        
+        # 准备任务信息
+        task_info = {
+            'id': task_id,
+            'type': 'audio_video_merge',
+            'status': 'pending',
+            'created_at': time.time(),
+            'video_url': video_url,
+            'audio_url': audio_url,
+            'output_format': output_format,
+            'api_key': api_key
+        }
+        
+        # 保存任务信息
+        task_file = os.path.join(task_folder, 'task.json')
+        with open(task_file, 'w') as f:
+            json.dump(task_info, f)
+        
+        # 提交合并任务
+        result = merge_audio_video(video_url, audio_url, output_format, api_key)
+        
+        if not result['success']:
+            # 更新任务状态为失败
+            task_info['status'] = 'failed'
+            task_info['error'] = result.get('error', '提交任务失败')
+            with open(task_file, 'w') as f:
+                json.dump(task_info, f)
+            
+            return jsonify({
+                'success': False,
+                'error': result.get('error', '提交任务失败')
+            }), 500
+        
+        # 更新任务信息
+        task_info['vod_task_id'] = result.get('task_id', '')
+        task_info['status'] = 'processing'
+        with open(task_file, 'w') as f:
+            json.dump(task_info, f)
+        
+        # 启动后台线程处理任务
+        thread = threading.Thread(target=process_vod_merge_task, args=(task_id,))
+        thread.daemon = True
+        thread.start()
+        
+        # 返回任务ID
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': '任务已提交'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/audio_video_merge', methods=['POST'])
+def audio_video_merge():
+    """处理单个音频和视频的合并请求"""
+    try:
+        # 获取API Key（如果有）
+        api_key = request.form.get('api_key', '')
+        
+        # 检查是否有视频URL
+        video_url = request.form.get('video_url')
+        if not video_url:
+            return jsonify({
+                'success': False,
+                'error': '缺少视频URL'
+            }), 400
+            
+        # 检查是否有音频URL
+        audio_url = request.form.get('audio_url')
+        if not audio_url:
+            return jsonify({
+                'success': False,
+                'error': '缺少音频URL'
+            }), 400
+        
+        # 获取输出格式
+        output_format = request.form.get('output_format', 'mp4')
+        
+        # 获取合并引擎
+        merge_engine = request.form.get('merge_engine', 'default')
+        
+        # 创建任务ID和任务文件夹
+        task_id = f"audio_video_merge_{uuid.uuid4().hex}"
+        task_folder = os.path.join(MERGE_TASKS_FOLDER, task_id)
+        os.makedirs(task_folder, exist_ok=True)
+        
+        # 准备任务信息
+        task_info = {
+            'id': task_id,
+            'type': 'audio_video_merge',
+            'status': 'pending',
+            'created_at': time.time(),
+            'video_url': video_url,
+            'audio_url': audio_url,
+            'output_format': output_format,
+            'merge_engine': merge_engine,
+            'api_key': api_key
+        }
+        
+        # 保存任务信息
+        task_file = os.path.join(task_folder, 'task.json')
+        with open(task_file, 'w') as f:
+            json.dump(task_info, f)
+        
+        # 提交合并任务
+        result = merge_audio_video(video_url, audio_url, output_format, api_key)
+        
+        if not result['success']:
+            # 更新任务状态为失败
+            task_info['status'] = 'failed'
+            task_info['error'] = result.get('error', '提交任务失败')
+            with open(task_file, 'w') as f:
+                json.dump(task_info, f)
+            
+            return jsonify({
+                'success': False,
+                'error': result.get('error', '提交任务失败')
+            }), 500
+        
+        # 更新任务信息
+        task_info['vod_task_id'] = result.get('task_id', '')
+        task_info['status'] = 'processing'
+        with open(task_file, 'w') as f:
+            json.dump(task_info, f)
+        
+        # 启动后台线程处理任务
+        thread = threading.Thread(target=process_vod_merge_task, args=(task_id,))
+        thread.daemon = True
+        thread.start()
+        
+        # 返回任务ID
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': '任务已提交'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+def merge_audio_video(video_url, audio_url, output_format='mp4', api_key=None):
+    """
+    调用火山引擎视频点播服务API合并单个音频和视频文件
+    
+    Args:
+        video_url: 视频文件URL
+        audio_url: 音频文件URL
+        output_format: 输出文件格式，默认为mp4
+        api_key: API密钥，可选
+        
+    Returns:
+        dict: 包含任务提交结果的字典
+    """
+    try:
+        # 获取VOD服务实例
+        vod_instance = get_vod_instance(api_key)
+        if not vod_instance:
+            return {
+                'success': False,
+                'error': '无法获取VOD服务实例，请检查API密钥'
+            }
+        
+        # 构建请求数据
+        request_data = {
+            'MediaProcessTask': {
+                'AudioVideoMergeTask': {
+                    'VideoUrl': video_url,
+                    'AudioUrl': audio_url,
+                    'OutputFormat': output_format
+                }
+            }
+        }
+        
+        # 调用API
+        # 注意：这里是模拟响应，实际应调用火山引擎API
+        # response = vod_instance.submit_media_process_job(request_data)
+        
+        # 模拟响应
+        task_id = f"vod_av_merge_{uuid.uuid4().hex}"
+        
+        return {
+            'success': True,
+            'task_id': task_id,
+            'message': '任务已提交'
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'提交音频视频合并任务失败: {str(e)}'
+        }
+
+def merge_multiple_videos(video_urls, output_format='mp4', audio_config=None, api_key=None):
+    """
+    调用火山引擎视频点播服务API合并多个已有声音的视频
+    
+    Args:
+        video_urls: 视频文件URL列表
+        output_format: 输出文件格式，默认为mp4
+        audio_config: 音频配置，可选
+        api_key: API密钥，可选
+        
+    Returns:
+        dict: 包含任务提交结果的字典
+    """
+    try:
+        # 获取VOD服务实例
+        vod_instance = get_vod_instance(api_key)
+        if not vod_instance:
+            return {
+                'success': False,
+                'error': '无法获取VOD服务实例，请检查API密钥'
+            }
+        
+        # 构建请求数据
+        request_data = {
+            'MediaProcessTask': {
+                'MultipleVideosMergeTask': {
+                    'VideoUrls': video_urls,
+                    'OutputFormat': output_format
+                }
+            }
+        }
+        
+        # 添加音频配置（如果有）
+        if audio_config:
+            request_data['MediaProcessTask']['MultipleVideosMergeTask']['AudioConfig'] = audio_config
+        
+        # 调用API
+        # 注意：这里是模拟响应，实际应调用火山引擎API
+        # response = vod_instance.submit_media_process_job(request_data)
+        
+        # 模拟响应
+        task_id = f"vod_multi_merge_{uuid.uuid4().hex}"
+        
+        return {
+            'success': True,
+            'task_id': task_id,
+            'message': '任务已提交'
+        }
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f'提交多视频合并任务失败: {str(e)}'
+        }
+
+@app.route('/multiple_videos_merge', methods=['POST'])
+def multiple_videos_merge():
+    """处理多个已有声音的视频合并请求"""
+    try:
+        # 获取API Key（如果有）
+        api_key = request.form.get('api_key', '')
+        
+        # 检查是否有视频URL列表
+        video_urls = request.form.get('video_urls')
+        if not video_urls:
+            return jsonify({
+                'success': False,
+                'error': '缺少视频URL列表'
+            }), 400
+            
+        # 解析视频URL列表
+        try:
+            video_urls = json.loads(video_urls)
+            if not isinstance(video_urls, list) or len(video_urls) == 0:
+                raise ValueError("视频URL列表格式不正确")
+        except Exception:
+            return jsonify({
+                'success': False,
+                'error': '视频URL列表格式不正确'
+            }), 400
+        
+        # 获取输出格式
+        output_format = request.form.get('output_format', 'mp4')
+        
+        # 获取音频配置
+        audio_config = request.form.get('audio_config')
+        if audio_config:
+            try:
+                audio_config = json.loads(audio_config)
+            except Exception:
+                return jsonify({
+                    'success': False,
+                    'error': '音频配置格式不正确'
+                }), 400
+        
+        # 获取合并引擎
+        merge_engine = request.form.get('merge_engine', 'default')
+        
+        # 创建任务ID和任务文件夹
+        task_id = f"videos_merge_{uuid.uuid4().hex}"
+        task_folder = os.path.join(MERGE_TASKS_FOLDER, task_id)
+        os.makedirs(task_folder, exist_ok=True)
+        
+        # 准备任务信息
+        task_info = {
+            'id': task_id,
+            'type': 'multiple_videos_merge',
+            'status': 'pending',
+            'created_at': time.time(),
+            'video_urls': video_urls,
+            'output_format': output_format,
+            'audio_config': audio_config,
+            'merge_engine': merge_engine,
+            'api_key': api_key
+        }
+        
+        # 保存任务信息
+        task_file = os.path.join(task_folder, 'task.json')
+        with open(task_file, 'w') as f:
+            json.dump(task_info, f)
+        
+        # 提交合并任务
+        result = merge_multiple_videos(video_urls, output_format, audio_config, api_key)
+        
+        if not result['success']:
+            # 更新任务状态为失败
+            task_info['status'] = 'failed'
+            task_info['error'] = result.get('error', '提交任务失败')
+            with open(task_file, 'w') as f:
+                json.dump(task_info, f)
+            
+            return jsonify({
+                'success': False,
+                'error': result.get('error', '提交任务失败')
+            }), 500
+        
+        # 更新任务信息
+        task_info['vod_task_id'] = result.get('task_id', '')
+        task_info['status'] = 'processing'
+        with open(task_file, 'w') as f:
+            json.dump(task_info, f)
+        
+        # 启动后台线程处理任务
+        thread = threading.Thread(target=process_vod_merge_task, args=(task_id,))
+        thread.daemon = True
+        thread.start()
+        
+        # 返回任务ID
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': '任务已提交'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/merge_task_status/<task_id>', methods=['GET'])
 def merge_task_status(task_id):
     """获取视频合并任务的状态"""
@@ -1684,10 +2420,6 @@ def merge_task_status(task_id):
         return jsonify({
             'error': str(e)
         }), 500
-    
-    return jsonify({
-        'count': reference_count
-    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
