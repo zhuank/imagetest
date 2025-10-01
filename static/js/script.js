@@ -76,8 +76,62 @@ if (!window.availableVideos) {
     window.availableVideos = []; // 可用视频列表
 }
 
+// 节点类型选择器相关变量
+let selectedNodeType = 'video';
+
+// 初始化节点类型选择器
+function initNodeTypeSelector() {
+    const typeOptions = document.querySelectorAll('.type-option');
+    const addNodeBtn = document.querySelector('.btn-add-node');
+    const selectedTypeIndicator = document.querySelector('.selected-type-indicator');
+    
+    typeOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            // 移除所有选中状态
+            typeOptions.forEach(opt => opt.classList.remove('selected'));
+            // 添加选中状态
+            option.classList.add('selected');
+            
+            // 更新选中的节点类型
+            selectedNodeType = option.dataset.type;
+            
+            // 更新指示器
+            updateSelectedTypeIndicator();
+            
+            // 启用添加按钮
+            addNodeBtn.disabled = false;
+        });
+    });
+    
+    // 默认选择视频类型
+    const defaultOption = document.querySelector('.type-option[data-type="video"]');
+    if (defaultOption) {
+        defaultOption.click();
+    }
+}
+
+// 更新选中类型指示器
+function updateSelectedTypeIndicator() {
+    const indicator = document.querySelector('.selected-type-indicator');
+    const typeIcon = indicator.querySelector('.type-icon');
+    const typeText = indicator.querySelector('.type-text');
+    
+    if (selectedNodeType === 'video') {
+        typeIcon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
+        typeText.textContent = '视频节点';
+    } else {
+        typeIcon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
+        typeText.textContent = '音频节点';
+    }
+}
+
 // 添加视频节点
 function addVideoNode() {
+    if (!selectedNodeType) {
+        alert('请先选择节点类型');
+        return;
+    }
+    
     const nodeId = `node_${nextNodeId++}`;
     const nodeNumber = videoNodes.length + 1;
     
@@ -91,6 +145,39 @@ function addVideoNode() {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = nodeHtml;
     const nodeElement = tempDiv.firstElementChild;
+    
+    // 设置节点类型和状态
+    nodeElement.dataset.nodeType = selectedNodeType;
+    nodeElement.dataset.status = 'idle';
+    
+    // 设置节点标题
+    const nodeTitle = nodeElement.querySelector('.node-title');
+    if (nodeTitle) {
+        nodeTitle.textContent = `${selectedNodeType === 'video' ? '视频' : '音频'}节点 ${nodeNumber}`;
+    }
+    
+    // 设置节点类型图标
+    const typeIcon = nodeElement.querySelector('.node-type-icon');
+    if (typeIcon) {
+        if (selectedNodeType === 'video') {
+            typeIcon.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
+        } else {
+            typeIcon.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
+        }
+    }
+    
+    // 设置上传区域文本
+    const uploadText = nodeElement.querySelector('.upload-text');
+    const uploadHint = nodeElement.querySelector('.upload-hint');
+    if (uploadText && uploadHint) {
+        if (selectedNodeType === 'video') {
+            uploadText.textContent = '点击或拖拽上传视频文件';
+            uploadHint.textContent = '支持 MP4, AVI, MOV 等格式';
+        } else {
+            uploadText.textContent = '点击或拖拽上传音频文件';
+            uploadHint.textContent = '支持 MP3, WAV, AAC 等格式';
+        }
+    }
     
     // 添加到节点列表
     const nodesList = document.getElementById('videoNodesList');
@@ -107,8 +194,10 @@ function addVideoNode() {
         id: nodeId,
         element: nodeElement,
         file: null,
-        type: 'video', // 默认为视频类型
-        url: null
+        type: selectedNodeType,
+        url: null,
+        status: 'idle',
+        progress: 0
     };
     
     videoNodes.push(nodeInfo);
@@ -125,6 +214,15 @@ function addVideoNode() {
     // 根据当前合并类型更新节点显示
     updateNodesByMergeType();
     
+    // 添加动画效果
+    nodeElement.style.opacity = '0';
+    nodeElement.style.transform = 'translateY(20px)';
+    setTimeout(() => {
+        nodeElement.style.transition = 'all 0.3s ease';
+        nodeElement.style.opacity = '1';
+        nodeElement.style.transform = 'translateY(0)';
+    }, 10);
+    
     return nodeInfo;
 }
 
@@ -133,114 +231,377 @@ function bindNodeEvents(nodeInfo) {
     const nodeId = nodeInfo.id;
     const nodeElement = nodeInfo.element;
     
-    // 文件上传事件
-    const videoFileUpload = nodeElement.querySelector(`#videoUpload_${nodeId}`);
-    const audioFileUpload = nodeElement.querySelector(`#audioUpload_${nodeId}`);
-    const fileNameSpan = nodeElement.querySelector(`#fileName_${nodeId}`);
-    const videoUploadButton = nodeElement.querySelector('.video-upload-btn');
-    const audioUploadButton = nodeElement.querySelector('.audio-upload-btn');
-    const nodeTypeSelect = nodeElement.querySelector('.node-type');
+    if (!nodeInfo) return;
     
-    // 视频上传按钮点击事件
-    if (videoUploadButton) {
-        videoUploadButton.addEventListener('click', function() {
-            videoFileUpload.click();
+    // 上传区域拖拽和点击事件
+    const uploadArea = nodeElement.querySelector('.upload-area');
+    const fileInput = nodeElement.querySelector('.file-input');
+    const changeFileBtn = nodeElement.querySelector('.btn-change-file');
+    
+    if (uploadArea && fileInput) {
+        // 点击上传区域
+        uploadArea.addEventListener('click', () => {
+            if (!nodeInfo.file) {
+                fileInput.click();
+            }
         });
-    }
-    
-    // 音频上传按钮点击事件
-    if (audioUploadButton) {
-        audioUploadButton.addEventListener('click', function() {
-            audioFileUpload.click();
+        
+        // 拖拽事件
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
         });
-    }
-    
-    // 节点类型变更事件
-    if (nodeTypeSelect) {
-        nodeTypeSelect.addEventListener('change', function() {
-            const nodeType = this.value;
-            nodeInfo.type = nodeType;
+        
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
             
-            // 更新节点显示
-            updateNodeDisplay(nodeInfo);
-            
-            // 更新合并按钮状态
-            updateMergeButtonState();
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(nodeElement, files[0]);
+            }
         });
-    }
-    
-    // 视频文件选择变化事件
-    if (videoFileUpload) {
-        videoFileUpload.addEventListener('change', function() {
-            if (this.files.length > 0) {
-                const file = this.files[0];
-                fileNameSpan.textContent = file.name;
-                fileNameSpan.classList.add('has-file');
-                nodeInfo.file = file;
-                
-                // 自动设置节点类型为视频
-                if (nodeTypeSelect) {
-                    nodeTypeSelect.value = 'video';
-                    nodeInfo.type = 'video';
-                }
-                
-                // 清空音频文件选择
-                if (audioFileUpload) {
-                    audioFileUpload.value = '';
-                }
-                
-                // 更新文件预览
-                updateFilePreview(nodeInfo);
-                
-                // 更新合并按钮状态
-                updateMergeButtonState();
+        
+        // 文件选择事件
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                handleFileUpload(nodeElement, file);
             }
         });
     }
     
-    // 音频文件选择变化事件
-    if (audioFileUpload) {
-        audioFileUpload.addEventListener('change', function() {
-            if (this.files.length > 0) {
-                const file = this.files[0];
-                fileNameSpan.textContent = file.name;
-                fileNameSpan.classList.add('has-file');
-                nodeInfo.file = file;
-                
-                // 自动设置节点类型为音频
-                if (nodeTypeSelect) {
-                    nodeTypeSelect.value = 'audio';
-                    nodeInfo.type = 'audio';
-                }
-                
-                // 清空视频文件选择
-                if (videoFileUpload) {
-                    videoFileUpload.value = '';
-                }
-                
-                // 更新文件预览
-                updateFilePreview(nodeInfo);
-                
-                // 更新合并按钮状态
-                updateMergeButtonState();
-            }
+    // 更换文件按钮
+    if (changeFileBtn) {
+        changeFileBtn.addEventListener('click', () => {
+            fileInput.click();
         });
     }
     
-    // 上移按钮
-    nodeElement.querySelector('.btn-move-up').addEventListener('click', function() {
-        moveNode(nodeId, 'up');
+    // 移动和删除按钮
+    const moveUpBtn = nodeElement.querySelector('.btn-move-up');
+    const moveDownBtn = nodeElement.querySelector('.btn-move-down');
+    const removeBtn = nodeElement.querySelector('.btn-remove');
+    
+    if (moveUpBtn) {
+        moveUpBtn.addEventListener('click', () => moveNodeUp(nodeId));
+    }
+    
+    if (moveDownBtn) {
+        moveDownBtn.addEventListener('click', () => moveNodeDown(nodeId));
+    }
+    
+    if (removeBtn) {
+        removeBtn.addEventListener('click', () => removeVideoNode(nodeId));
+    }
+    
+    // 节点拖拽排序功能
+    const nodeCard = nodeElement.querySelector('.node-card');
+    if (nodeCard) {
+        nodeCard.draggable = true;
+        
+        nodeCard.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', nodeId);
+            nodeElement.classList.add('dragging');
+        });
+        
+        nodeCard.addEventListener('dragend', (e) => {
+            nodeElement.classList.remove('dragging');
+        });
+        
+        nodeCard.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            const draggingElement = document.querySelector('.dragging');
+            if (draggingElement && draggingElement !== nodeElement) {
+                const container = document.getElementById('videoNodesList');
+                const afterElement = getDragAfterElement(container, e.clientY);
+                if (afterElement == null) {
+                    container.appendChild(draggingElement);
+                } else {
+                    container.insertBefore(draggingElement, afterElement);
+                }
+            }
+        });
+        
+        nodeCard.addEventListener('drop', (e) => {
+            e.preventDefault();
+            updateNodeOrder();
+        });
+    }
+}
+
+// 处理文件上传
+function handleFileUpload(nodeElement, file) {
+    const nodeId = nodeElement.id;
+    const nodeInfo = videoNodes.find(node => node.id === nodeId);
+    
+    if (!nodeInfo) return;
+    
+    // 验证文件类型
+    const fileType = file.type;
+    const isVideo = fileType.startsWith('video/');
+    const isAudio = fileType.startsWith('audio/');
+    
+    if (nodeInfo.type === 'video' && !isVideo) {
+        alert('请选择视频文件');
+        return;
+    }
+    
+    if (nodeInfo.type === 'audio' && !isAudio) {
+        alert('请选择音频文件');
+        return;
+    }
+    
+    // 更新节点信息
+    nodeInfo.file = file;
+    nodeInfo.status = 'idle';
+    
+    // 更新UI显示
+    updateNodeFileDisplay(nodeElement, file);
+    updateNodeStatus(nodeElement, 'idle');
+    updateMergeButtonState();
+}
+
+// 更新节点文件显示
+function updateNodeFileDisplay(nodeElement, file) {
+    const uploadArea = nodeElement.querySelector('.upload-area');
+    const fileInfo = nodeElement.querySelector('.file-info');
+    const fileName = nodeElement.querySelector('.file-name');
+    const fileSize = nodeElement.querySelector('.file-size');
+    const previewSection = nodeElement.querySelector('.node-preview-section');
+    
+    if (file) {
+        // 隐藏上传区域，显示文件信息
+        if (uploadArea) uploadArea.style.display = 'none';
+        if (fileInfo) fileInfo.style.display = 'flex';
+        
+        // 更新文件信息
+        if (fileName) fileName.textContent = file.name;
+        if (fileSize) fileSize.textContent = formatFileSize(file.size);
+        
+        // 更新预览
+        const nodeInfo = videoNodes.find(node => node.element === nodeElement);
+        if (nodeInfo) {
+            nodeInfo.file = file;
+            updateFilePreview(nodeInfo);
+        }
+        if (previewSection) previewSection.style.display = 'block';
+    } else {
+        // 显示上传区域，隐藏文件信息
+        if (uploadArea) uploadArea.style.display = 'block';
+        if (fileInfo) fileInfo.style.display = 'none';
+        if (previewSection) previewSection.style.display = 'none';
+    }
+}
+
+// 更新节点状态
+function updateNodeStatus(nodeElement, status) {
+    const nodeId = nodeElement.id;
+    const nodeInfo = videoNodes.find(node => node.id === nodeId);
+    
+    if (nodeInfo) {
+        nodeInfo.status = status;
+        nodeElement.dataset.status = status;
+        
+        const statusIndicator = nodeElement.querySelector('.node-status-indicator');
+        if (statusIndicator) {
+            statusIndicator.dataset.status = status;
+        }
+    }
+}
+
+// 更新节点进度
+function updateNodeProgress(nodeElement, progress) {
+    const nodeId = nodeElement.id;
+    const nodeInfo = videoNodes.find(node => node.id === nodeId);
+    
+    if (nodeInfo) {
+        nodeInfo.progress = progress;
+        
+        const progressFill = nodeElement.querySelector('.progress-fill');
+        const progressText = nodeElement.querySelector('.progress-text');
+        
+        if (progressFill) {
+            progressFill.style.width = `${progress}%`;
+        }
+        
+        if (progressText) {
+            progressText.textContent = `${Math.round(progress)}%`;
+        }
+    }
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 删除旧版本的updateFilePreview函数，使用下面的新版本
+
+// 更新合并按钮状态
+function updateMergeButtonState() {
+    const mergeBtn = document.getElementById('mergeVideosBtn');
+    if (!mergeBtn) return;
+    
+    const hasFiles = videoNodes.some(node => node.file);
+    mergeBtn.disabled = !hasFiles;
+}
+
+// 移动节点向上
+function moveNodeUp(nodeId) {
+    const nodeIndex = videoNodes.findIndex(node => node.id === nodeId);
+    if (nodeIndex > 0) {
+        // 交换数组中的位置
+        [videoNodes[nodeIndex], videoNodes[nodeIndex - 1]] = [videoNodes[nodeIndex - 1], videoNodes[nodeIndex]];
+        
+        // 重新渲染节点列表
+        renderVideoNodes();
+    }
+}
+
+// 移动节点向下
+function moveNodeDown(nodeId) {
+    const nodeIndex = videoNodes.findIndex(node => node.id === nodeId);
+    if (nodeIndex < videoNodes.length - 1) {
+        // 交换数组中的位置
+        [videoNodes[nodeIndex], videoNodes[nodeIndex + 1]] = [videoNodes[nodeIndex + 1], videoNodes[nodeIndex]];
+        
+        // 重新渲染节点列表
+        renderVideoNodes();
+    }
+}
+
+// 重新渲染所有节点
+function renderVideoNodes() {
+    const container = document.getElementById('videoNodesList');
+    if (!container) return;
+    
+    // 清空容器
+    container.innerHTML = '';
+    
+    // 重新添加所有节点
+    videoNodes.forEach((nodeInfo, index) => {
+        const nodeElement = createNodeElement(nodeInfo.id, nodeInfo.type);
+        container.appendChild(nodeElement);
+        
+        // 恢复文件信息
+        if (nodeInfo.file) {
+            updateNodeFileDisplay(nodeElement, nodeInfo.file);
+        }
+        
+        // 恢复状态
+        updateNodeStatus(nodeElement, nodeInfo.status || 'empty');
+        
+        // 恢复进度
+        if (nodeInfo.progress) {
+            updateNodeProgress(nodeElement, nodeInfo.progress);
+        }
+        
+        // 更新nodeInfo的element引用
+        nodeInfo.element = nodeElement;
+        
+        // 重新绑定事件
+        bindNodeEvents(nodeInfo);
     });
     
-    // 下移按钮
-    nodeElement.querySelector('.btn-move-down').addEventListener('click', function() {
-        moveNode(nodeId, 'down');
+    // 更新空状态显示
+    updateEmptyState();
+}
+
+// 获取拖拽后的插入位置
+function getDragAfterElement(container, y) {
+    const draggableElements = [...container.querySelectorAll('.workflow-node:not(.dragging)')];
+    
+    return draggableElements.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// 更新节点顺序
+function updateNodeOrder() {
+    const container = document.getElementById('videoNodesList');
+    if (!container) return;
+    
+    const nodeElements = [...container.querySelectorAll('.workflow-node')];
+    const newOrder = [];
+    
+    nodeElements.forEach(element => {
+        const nodeId = element.id;
+        const nodeInfo = videoNodes.find(node => node.id === nodeId);
+        if (nodeInfo) {
+            newOrder.push(nodeInfo);
+        }
     });
     
-    // 删除按钮
-    nodeElement.querySelector('.btn-remove').addEventListener('click', function() {
-        removeNode(nodeId);
-    });
+    // 更新videoNodes数组
+    videoNodes.length = 0;
+    videoNodes.push(...newOrder);
+    
+    // 更新节点编号
+    updateNodeNumbers();
+}
+
+// 创建节点元素
+function createNodeElement(nodeId, nodeType) {
+    const template = document.getElementById('videoNodeTemplate');
+    if (!template) return null;
+    
+    const nodeElement = template.cloneNode(true);
+    nodeElement.id = nodeId;
+    nodeElement.style.display = 'block';
+    nodeElement.dataset.type = nodeType;
+    nodeElement.dataset.status = 'empty';
+    
+    // 更新节点标题和图标
+    const nodeTitle = nodeElement.querySelector('.node-title');
+    const typeIcon = nodeElement.querySelector('.node-type-icon');
+    const uploadText = nodeElement.querySelector('.upload-text');
+    
+    if (nodeTitle) {
+        nodeTitle.textContent = nodeType === 'video' ? '视频节点' : '音频节点';
+    }
+    
+    if (typeIcon) {
+        typeIcon.textContent = nodeType === 'video' ? '🎬' : '🎵';
+    }
+    
+    if (uploadText) {
+        uploadText.textContent = nodeType === 'video' ? '点击或拖拽视频文件到此处' : '点击或拖拽音频文件到此处';
+    }
+    
+    return nodeElement;
+}
+
+// 更新空状态显示
+function updateEmptyState() {
+    const container = document.getElementById('videoNodesList');
+    const emptyState = document.querySelector('.empty-state');
+    
+    if (!container || !emptyState) return;
+    
+    if (videoNodes.length === 0) {
+        emptyState.style.display = 'flex';
+    } else {
+        emptyState.style.display = 'none';
+    }
 }
 
 // 更新文件预览
@@ -251,27 +612,109 @@ function updateFilePreview(nodeInfo) {
     
     if (!file) return;
     
-    const videoPlayer = nodeElement.querySelector('.node-video-player');
-    const audioPlayer = nodeElement.querySelector('.node-audio-player');
+    const previewSection = nodeElement.querySelector('.node-preview-section');
+    if (!previewSection) return;
     
-    // 创建一个临时URL用于预览
-    const objectURL = URL.createObjectURL(file);
+    // 清除现有预览
+    previewSection.innerHTML = '';
     
-    // 根据文件类型显示不同的预览
-    if (file.type.startsWith('audio/')) {
-        // 音频文件
-        if (audioPlayer) {
-            audioPlayer.src = objectURL;
-            audioPlayer.style.display = 'block';
-            if (videoPlayer) videoPlayer.style.display = 'none';
-        }
+    // 创建预览容器
+    const previewContainer = document.createElement('div');
+    previewContainer.className = 'preview-container';
+    
+    // 创建媒体播放器
+    let mediaElement;
+    if (file.type.startsWith('video/')) {
+        mediaElement = document.createElement('video');
+        mediaElement.className = 'node-video-player';
+        mediaElement.controls = true;
+        mediaElement.preload = 'metadata';
+    } else if (file.type.startsWith('audio/')) {
+        mediaElement = document.createElement('audio');
+        mediaElement.className = 'node-audio-player';
+        mediaElement.controls = true;
+        mediaElement.preload = 'metadata';
+    }
+    
+    if (mediaElement) {
+        const objectURL = URL.createObjectURL(file);
+        mediaElement.src = objectURL;
+        
+        // 添加元数据加载事件
+        mediaElement.addEventListener('loadedmetadata', () => {
+            updateMediaMetadata(nodeElement, file, mediaElement);
+        });
+        
+        previewContainer.appendChild(mediaElement);
+    }
+    
+    // 创建文件信息区域
+    const fileInfo = document.createElement('div');
+    fileInfo.className = 'file-info';
+    fileInfo.innerHTML = `
+        <div class="file-basic-info">
+            <span class="file-name" title="${file.name}">${file.name}</span>
+            <span class="file-size">${formatFileSize(file.size)}</span>
+            <span class="file-type">${file.type}</span>
+        </div>
+        <div class="file-metadata" id="metadata-${nodeId}">
+            <span class="loading-metadata">正在加载媒体信息...</span>
+        </div>
+    `;
+    
+    previewContainer.appendChild(fileInfo);
+    previewSection.appendChild(previewContainer);
+}
+
+// 更新媒体元数据信息
+function updateMediaMetadata(nodeElement, file, mediaElement) {
+    const nodeId = nodeElement.id;
+    const metadataContainer = document.getElementById(`metadata-${nodeId}`);
+    
+    if (!metadataContainer) return;
+    
+    let metadataHTML = '';
+    
+    if (file.type.startsWith('video/')) {
+        const duration = formatDuration(mediaElement.duration);
+        const resolution = `${mediaElement.videoWidth} × ${mediaElement.videoHeight}`;
+        
+        metadataHTML = `
+            <div class="metadata-item">
+                <span class="metadata-label">时长:</span>
+                <span class="metadata-value">${duration}</span>
+            </div>
+            <div class="metadata-item">
+                <span class="metadata-label">分辨率:</span>
+                <span class="metadata-value">${resolution}</span>
+            </div>
+        `;
+    } else if (file.type.startsWith('audio/')) {
+        const duration = formatDuration(mediaElement.duration);
+        
+        metadataHTML = `
+            <div class="metadata-item">
+                <span class="metadata-label">时长:</span>
+                <span class="metadata-value">${duration}</span>
+            </div>
+        `;
+    }
+    
+    metadataContainer.innerHTML = metadataHTML;
+}
+
+// 格式化时长
+function formatDuration(seconds) {
+    if (isNaN(seconds) || seconds < 0) return '未知';
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+        return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     } else {
-        // 视频文件
-        if (videoPlayer) {
-            videoPlayer.src = objectURL;
-            videoPlayer.style.display = 'block';
-            if (audioPlayer) audioPlayer.style.display = 'none';
-        }
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 }
 
@@ -461,6 +904,15 @@ async function mergeVideos() {
     updateMergeStepStatus('merge-process-status', '待处理');
     updateMergeStepStatus('merge-complete-status', '待处理');
     
+    // 初始化所有节点状态为处理中
+    videoNodes.forEach(node => {
+        const nodeElement = document.getElementById(node.id);
+        if (nodeElement && node.file) {
+            updateNodeStatus(nodeElement, 'processing');
+            updateNodeProgress(nodeElement, 0);
+        }
+    });
+    
     // 准备请求数据
     const formData = new FormData();
     
@@ -550,6 +1002,14 @@ async function pollMergeStatus(taskId) {
         if (result.progress !== undefined) {
             const progressPercent = Math.min(Math.max(result.progress, 0), 100);
             updateMergeProgress(progressPercent);
+            
+            // 更新节点进度
+            updateNodesProgress(progressPercent);
+        }
+        
+        // 更新节点状态（如果有节点级别的状态信息）
+        if (result.node_status) {
+            updateNodesStatus(result.node_status);
         }
         
         if (result.status === 'completed') {
@@ -557,10 +1017,28 @@ async function pollMergeStatus(taskId) {
             updateMergeStepStatus('merge-process-status', '完成');
             updateMergeStepStatus('merge-complete-status', '完成');
             
+            // 将所有节点标记为完成
+            videoNodes.forEach(node => {
+                const nodeElement = document.getElementById(node.id);
+                if (nodeElement && node.file) {
+                    updateNodeStatus(nodeElement, 'completed');
+                    updateNodeProgress(nodeElement, 100);
+                }
+            });
+            
             // 显示结果
             showMergeResult(result.output_url || result.video_url, result.output_url || result.download_url);
         } else if (result.status === 'failed') {
             updateMergeStepStatus('merge-process-status', '失败');
+            
+            // 将所有节点标记为错误
+            videoNodes.forEach(node => {
+                const nodeElement = document.getElementById(node.id);
+                if (nodeElement && node.file) {
+                    updateNodeStatus(nodeElement, 'error');
+                }
+            });
+            
             showToast('视频合并失败: ' + (result.error || '未知错误'), 'error');
         } else {
             // 继续轮询
@@ -569,6 +1047,15 @@ async function pollMergeStatus(taskId) {
     } catch (error) {
         console.error('Error polling merge status:', error);
         updateMergeStepStatus('merge-process-status', '失败');
+        
+        // 将所有节点标记为错误
+        videoNodes.forEach(node => {
+            const nodeElement = document.getElementById(node.id);
+            if (nodeElement && node.file) {
+                updateNodeStatus(nodeElement, 'error');
+            }
+        });
+        
         showToast('检查合并状态失败，请检查网络连接', 'error');
     }
 }
@@ -579,6 +1066,50 @@ function updateMergeStepStatus(statusId, status) {
     if (statusElement) {
         statusElement.textContent = status;
         statusElement.className = 'step-status ' + status.toLowerCase();
+    }
+}
+
+// 更新所有节点进度
+function updateNodesProgress(overallProgress) {
+    videoNodes.forEach((node, index) => {
+        const nodeElement = document.getElementById(node.id);
+        if (nodeElement && node.file) {
+            // 为每个节点分配进度（简单平均分配）
+            const nodeProgress = Math.min(overallProgress, 100);
+            updateNodeProgress(nodeElement, nodeProgress);
+        }
+    });
+}
+
+// 更新节点状态（基于服务器返回的节点状态）
+function updateNodesStatus(nodeStatusData) {
+    if (!nodeStatusData || typeof nodeStatusData !== 'object') return;
+    
+    videoNodes.forEach((node, index) => {
+        const nodeElement = document.getElementById(node.id);
+        if (nodeElement && node.file) {
+            const nodeStatus = nodeStatusData[index] || nodeStatusData[node.id];
+            if (nodeStatus) {
+                updateNodeStatus(nodeElement, nodeStatus.status || 'processing');
+                if (nodeStatus.progress !== undefined) {
+                    updateNodeProgress(nodeElement, nodeStatus.progress);
+                }
+            }
+        }
+    });
+}
+
+// 更新整体合并进度
+function updateMergeProgress(progress) {
+    const progressBar = document.querySelector('.task-progress-bar .progress-fill');
+    const progressText = document.querySelector('.task-progress-text');
+    
+    if (progressBar) {
+        progressBar.style.width = `${progress}%`;
+    }
+    
+    if (progressText) {
+        progressText.textContent = `${Math.round(progress)}%`;
     }
 }
 
@@ -1197,6 +1728,96 @@ function generateNewVideo(mode) {
     }
 }
 
+// 切换帮助面板
+function toggleHelpPanel() {
+    const helpPanel = document.getElementById('helpPanel');
+    if (helpPanel) {
+        const isVisible = helpPanel.style.display !== 'none';
+        helpPanel.style.display = isVisible ? 'none' : 'block';
+        
+        // 添加动画效果
+        if (!isVisible) {
+            helpPanel.style.opacity = '0';
+            helpPanel.style.transform = 'translateX(100%)';
+            setTimeout(() => {
+                helpPanel.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                helpPanel.style.opacity = '1';
+                helpPanel.style.transform = 'translateX(0)';
+            }, 10);
+        }
+    }
+}
+
+// 初始化工具提示
+function initializeTooltips() {
+    // 为所有带有 data-tooltip 属性的元素添加工具提示
+    document.querySelectorAll('[data-tooltip]').forEach(element => {
+        element.addEventListener('mouseenter', function(e) {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip-popup';
+            tooltip.textContent = this.getAttribute('data-tooltip');
+            
+            // 设置位置
+            const rect = this.getBoundingClientRect();
+            tooltip.style.position = 'fixed';
+            tooltip.style.left = rect.left + 'px';
+            tooltip.style.top = (rect.top - 35) + 'px';
+            tooltip.style.zIndex = '10000';
+            
+            document.body.appendChild(tooltip);
+            
+            // 存储引用以便清理
+            this._tooltip = tooltip;
+        });
+        
+        element.addEventListener('mouseleave', function() {
+            if (this._tooltip) {
+                document.body.removeChild(this._tooltip);
+                this._tooltip = null;
+            }
+        });
+    });
+}
+
+// 初始化节点状态工具提示
+function initializeNodeStatusTooltips() {
+    // 为节点状态指示器添加工具提示
+    document.addEventListener('mouseenter', function(e) {
+        if (e.target.classList.contains('node-status-indicator')) {
+            const status = e.target.getAttribute('data-status');
+            const tooltipTexts = {
+                'idle': '空闲：节点已创建但未上传文件',
+                'ready': '就绪：文件已上传，等待处理',
+                'processing': '处理中：正在处理文件',
+                'completed': '完成：处理完成',
+                'error': '错误：处理过程中出现错误'
+            };
+            
+            const tooltipText = tooltipTexts[status] || '未知状态';
+            
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip-popup status-tooltip';
+            tooltip.textContent = tooltipText;
+            
+            const rect = e.target.getBoundingClientRect();
+            tooltip.style.position = 'fixed';
+            tooltip.style.left = rect.left + 'px';
+            tooltip.style.top = (rect.top - 35) + 'px';
+            tooltip.style.zIndex = '10000';
+            
+            document.body.appendChild(tooltip);
+            e.target._statusTooltip = tooltip;
+        }
+    }, true);
+    
+    document.addEventListener('mouseleave', function(e) {
+        if (e.target.classList.contains('node-status-indicator') && e.target._statusTooltip) {
+            document.body.removeChild(e.target._statusTooltip);
+            e.target._statusTooltip = null;
+        }
+    }, true);
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // 初始化模式选择按钮
     document.querySelectorAll('.mode-button').forEach(button => {
@@ -1214,4 +1835,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化参考图上传功能
     initializeReferenceUpload();
+    
+    // 初始化工具提示
+    initializeTooltips();
+    
+    // 初始化节点状态工具提示
+    initializeNodeStatusTooltips();
 });
