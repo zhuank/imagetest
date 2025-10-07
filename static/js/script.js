@@ -28,11 +28,18 @@ function showGenerationPage(mode) {
     }
 }
 
+// 全局变量
+let videoNodes = []; // 存储视频节点
+let nextNodeId = 1; // 下一个节点ID
+let selectedNodeType = 'video';
+
+// 初始化可用视频列表
+if (!window.availableVideos) {
+    window.availableVideos = []; // 可用视频列表
+}
+
 // 初始化视频合并模式
 function initializeMergeMode() {
-    // 添加视频节点按钮
-    document.getElementById('addVideoNode').addEventListener('click', addVideoNode);
-    
     // 清空节点按钮
     document.getElementById('clearVideoNodes').addEventListener('click', clearVideoNodes);
     
@@ -41,6 +48,9 @@ function initializeMergeMode() {
     
     // 创建新合并按钮
     document.getElementById('createNewMerge').addEventListener('click', resetMergeMode);
+    
+    // 初始渲染节点工作流程
+    renderVideoNodesWithInsertionPoints();
 }
 
 // 加载可用视频列表
@@ -53,9 +63,6 @@ async function loadAvailableVideos() {
             // 存储可用视频列表
             window.availableVideos = data.videos;
             
-            // 如果有视频节点，更新它们的选择列表
-            updateAllVideoSelects();
-            
             // 更新合并按钮状态
             updateMergeButtonState();
         } else {
@@ -63,1249 +70,511 @@ async function loadAvailableVideos() {
         }
     } catch (error) {
         console.error('Error loading videos:', error);
-        showToast('加载视频列表失败，请检查网络连接', 'error');
-    }
-}
-
-// 全局变量
-let videoNodes = []; // 存储视频节点
-let nextNodeId = 1; // 下一个节点ID
-
-// 初始化可用视频列表
-if (!window.availableVideos) {
-    window.availableVideos = []; // 可用视频列表
-}
-
-// 节点类型选择器相关变量
-let selectedNodeType = 'video';
-
-// 初始化节点类型选择器
-function initNodeTypeSelector() {
-    const typeOptions = document.querySelectorAll('.type-option');
-    const addNodeBtn = document.querySelector('.btn-add-node');
-    const selectedTypeIndicator = document.querySelector('.selected-type-indicator');
-    
-    typeOptions.forEach(option => {
-        option.addEventListener('click', () => {
-            // 移除所有选中状态
-            typeOptions.forEach(opt => opt.classList.remove('selected'));
-            // 添加选中状态
-            option.classList.add('selected');
-            
-            // 更新选中的节点类型
-            selectedNodeType = option.dataset.type;
-            
-            // 更新指示器
-            updateSelectedTypeIndicator();
-            
-            // 启用添加按钮
-            addNodeBtn.disabled = false;
-        });
-    });
-    
-    // 默认选择视频类型
-    const defaultOption = document.querySelector('.type-option[data-type="video"]');
-    if (defaultOption) {
-        defaultOption.click();
-    }
-}
-
-// 更新选中类型指示器
-function updateSelectedTypeIndicator() {
-    const indicator = document.querySelector('.selected-type-indicator');
-    const typeIcon = indicator.querySelector('.type-icon');
-    const typeText = indicator.querySelector('.type-text');
-    
-    if (selectedNodeType === 'video') {
-        typeIcon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
-        typeText.textContent = '视频节点';
-    } else {
-        typeIcon.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
-        typeText.textContent = '音频节点';
+        showToast('加载视频列表时发生错误', 'error');
     }
 }
 
 // 添加视频节点
-function addVideoNode() {
-    if (!selectedNodeType) {
-        alert('请先选择节点类型');
-        return;
-    }
+function addVideoNode(insertAfterNodeId = null) {
+    const nodeId = nextNodeId++;
+    const nodeElement = createNodeElement(nodeId, 'video');
     
-    const nodeId = `node_${nextNodeId++}`;
-    const nodeNumber = videoNodes.length + 1;
-    
-    // 从模板创建节点
-    const template = document.getElementById('videoNodeTemplate').innerHTML;
-    const nodeHtml = template
-        .replace(/{nodeId}/g, nodeId)
-        .replace(/{nodeNumber}/g, nodeNumber);
-    
-    // 创建节点元素
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = nodeHtml;
-    const nodeElement = tempDiv.firstElementChild;
-    
-    // 设置节点类型和状态
-    nodeElement.dataset.nodeType = selectedNodeType;
-    nodeElement.dataset.status = 'idle';
-    
-    // 设置节点标题
-    const nodeTitle = nodeElement.querySelector('.node-title');
-    if (nodeTitle) {
-        nodeTitle.textContent = `${selectedNodeType === 'video' ? '视频' : '音频'}节点 ${nodeNumber}`;
-    }
-    
-    // 设置节点类型图标
-    const typeIcon = nodeElement.querySelector('.node-type-icon');
-    if (typeIcon) {
-        if (selectedNodeType === 'video') {
-            typeIcon.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>';
-        } else {
-            typeIcon.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>';
-        }
-    }
-    
-    // 设置上传区域文本
-    const uploadText = nodeElement.querySelector('.upload-text');
-    const uploadHint = nodeElement.querySelector('.upload-hint');
-    if (uploadText && uploadHint) {
-        if (selectedNodeType === 'video') {
-            uploadText.textContent = '点击或拖拽上传视频文件';
-            uploadHint.textContent = '支持 MP4, AVI, MOV 等格式';
-        } else {
-            uploadText.textContent = '点击或拖拽上传音频文件';
-            uploadHint.textContent = '支持 MP3, WAV, AAC 等格式';
-        }
-    }
-    
-    // 添加到节点列表
-    const nodesList = document.getElementById('videoNodesList');
-    
-    // 如果是第一个节点，清除空消息
-    if (videoNodes.length === 0) {
-        nodesList.innerHTML = '';
-    }
-    
-    nodesList.appendChild(nodeElement);
-    
-    // 存储节点信息
     const nodeInfo = {
         id: nodeId,
+        type: 'video',
         element: nodeElement,
         file: null,
-        type: selectedNodeType,
-        url: null,
-        status: 'idle',
-        progress: 0
+        progress: 0,
+        status: 'empty'
     };
     
-    videoNodes.push(nodeInfo);
+    if (insertAfterNodeId) {
+        const targetNodeIndex = videoNodes.findIndex(node => node.id === insertAfterNodeId);
+        if (targetNodeIndex !== -1) {
+            videoNodes.splice(targetNodeIndex + 1, 0, nodeInfo);
+        } else {
+            videoNodes.push(nodeInfo);
+        }
+    } else {
+        videoNodes.push(nodeInfo);
+    }
     
-    // 绑定事件处理
     bindNodeEvents(nodeInfo);
-    
-    // 更新节点编号
-    updateNodeNumbers();
-    
-    // 更新合并按钮状态
+    renderVideoNodesWithInsertionPoints();
     updateMergeButtonState();
     
-    // 根据当前合并类型更新节点显示
-    updateNodesByMergeType();
+    return nodeInfo;
+}
+
+// 添加音频节点
+function addAudioNode(insertAfterNodeId = null) {
+    const nodeId = nextNodeId++;
+    const nodeElement = createNodeElement(nodeId, 'audio');
     
-    // 添加动画效果
-    nodeElement.style.opacity = '0';
-    nodeElement.style.transform = 'translateY(20px)';
-    setTimeout(() => {
-        nodeElement.style.transition = 'all 0.3s ease';
-        nodeElement.style.opacity = '1';
-        nodeElement.style.transform = 'translateY(0)';
-    }, 10);
+    const nodeInfo = {
+        id: nodeId,
+        type: 'audio',
+        element: nodeElement,
+        file: null,
+        progress: 0,
+        status: 'empty'
+    };
+    
+    if (insertAfterNodeId) {
+        const targetNodeIndex = videoNodes.findIndex(node => node.id === insertAfterNodeId);
+        if (targetNodeIndex !== -1) {
+            videoNodes.splice(targetNodeIndex + 1, 0, nodeInfo);
+        } else {
+            videoNodes.push(nodeInfo);
+        }
+    } else {
+        videoNodes.push(nodeInfo);
+    }
+    
+    bindNodeEvents(nodeInfo);
+    renderVideoNodesWithInsertionPoints();
+    updateMergeButtonState();
     
     return nodeInfo;
 }
 
 // 绑定节点事件
 function bindNodeEvents(nodeInfo) {
-    const nodeId = nodeInfo.id;
     const nodeElement = nodeInfo.element;
-    
-    if (!nodeInfo) return;
-    
-    // 上传区域拖拽和点击事件
     const uploadArea = nodeElement.querySelector('.upload-area');
     const fileInput = nodeElement.querySelector('.file-input');
-    const changeFileBtn = nodeElement.querySelector('.btn-change-file');
+    const removeBtn = nodeElement.querySelector('.remove-node');
     
     if (uploadArea && fileInput) {
-        // 点击上传区域
         uploadArea.addEventListener('click', () => {
             if (!nodeInfo.file) {
                 fileInput.click();
             }
         });
         
-        // 拖拽事件
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('drag-over');
-        });
-        
-        uploadArea.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('drag-over');
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('drag-over');
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                handleFileUpload(nodeElement, files[0]);
-            }
-        });
-        
-        // 文件选择事件
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) {
-                handleFileUpload(nodeElement, file);
+                handleFileUpload(nodeElement, file, nodeInfo);
             }
         });
-    }
-    
-    // 更换文件按钮
-    if (changeFileBtn) {
-        changeFileBtn.addEventListener('click', () => {
-            fileInput.click();
-        });
-    }
-    
-    // 移动和删除按钮
-    const moveUpBtn = nodeElement.querySelector('.btn-move-up');
-    const moveDownBtn = nodeElement.querySelector('.btn-move-down');
-    const removeBtn = nodeElement.querySelector('.btn-remove');
-    
-    if (moveUpBtn) {
-        moveUpBtn.addEventListener('click', () => moveNodeUp(nodeId));
-    }
-    
-    if (moveDownBtn) {
-        moveDownBtn.addEventListener('click', () => moveNodeDown(nodeId));
     }
     
     if (removeBtn) {
-        removeBtn.addEventListener('click', () => removeVideoNode(nodeId));
-    }
-    
-    // 节点拖拽排序功能
-    const nodeCard = nodeElement.querySelector('.node-card');
-    if (nodeCard) {
-        nodeCard.draggable = true;
-        
-        nodeCard.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('text/plain', nodeId);
-            nodeElement.classList.add('dragging');
-        });
-        
-        nodeCard.addEventListener('dragend', (e) => {
-            nodeElement.classList.remove('dragging');
-        });
-        
-        nodeCard.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            const draggingElement = document.querySelector('.dragging');
-            if (draggingElement && draggingElement !== nodeElement) {
-                const container = document.getElementById('videoNodesList');
-                const afterElement = getDragAfterElement(container, e.clientY);
-                if (afterElement == null) {
-                    container.appendChild(draggingElement);
-                } else {
-                    container.insertBefore(draggingElement, afterElement);
-                }
-            }
-        });
-        
-        nodeCard.addEventListener('drop', (e) => {
-            e.preventDefault();
-            updateNodeOrder();
+        removeBtn.addEventListener('click', () => {
+            removeNode(nodeInfo.id);
         });
     }
 }
 
 // 处理文件上传
-function handleFileUpload(nodeElement, file) {
-    const nodeId = nodeElement.id;
-    const nodeInfo = videoNodes.find(node => node.id === nodeId);
+async function handleFileUpload(nodeElement, file, nodeInfo) {
+    try {
+        // 验证文件
+        if (!validateFile(file, nodeInfo.type)) {
+            return;
+        }
+        
+        nodeInfo.file = file;
+        nodeInfo.status = 'uploaded';
+        
+        updateNodeFileDisplay(nodeElement, file);
+        updateMergeButtonState();
+        
+        showToast(`文件 ${file.name} 上传成功`, 'success');
+    } catch (error) {
+        console.error('File upload error:', error);
+        showToast('文件上传失败', 'error');
+    }
+}
+
+// 验证文件
+function validateFile(file, nodeType) {
+    const maxSize = 500 * 1024 * 1024; // 500MB
     
-    if (!nodeInfo) return;
-    
-    // 验证文件类型
-    const fileType = file.type;
-    const isVideo = fileType.startsWith('video/');
-    const isAudio = fileType.startsWith('audio/');
-    
-    if (nodeInfo.type === 'video' && !isVideo) {
-        alert('请选择视频文件');
-        return;
+    if (file.size > maxSize) {
+        showToast('文件大小超过限制 (500MB)', 'error');
+        return false;
     }
     
-    if (nodeInfo.type === 'audio' && !isAudio) {
-        alert('请选择音频文件');
-        return;
+    const videoFormats = ['mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv', 'webm'];
+    const audioFormats = ['mp3', 'wav', 'aac', 'ogg', 'flac', 'm4a'];
+    
+    const extension = file.name.split('.').pop().toLowerCase();
+    
+    if (nodeType === 'video' && !videoFormats.includes(extension)) {
+        showToast('不支持的视频格式', 'error');
+        return false;
     }
     
-    // 更新节点信息
-    nodeInfo.file = file;
-    nodeInfo.status = 'idle';
+    if (nodeType === 'audio' && !audioFormats.includes(extension)) {
+        showToast('不支持的音频格式', 'error');
+        return false;
+    }
     
-    // 更新UI显示
-    updateNodeFileDisplay(nodeElement, file);
-    updateNodeStatus(nodeElement, 'idle');
-    updateMergeButtonState();
+    return true;
 }
 
 // 更新节点文件显示
 function updateNodeFileDisplay(nodeElement, file) {
-    const uploadArea = nodeElement.querySelector('.upload-area');
     const fileInfo = nodeElement.querySelector('.file-info');
     const fileName = nodeElement.querySelector('.file-name');
     const fileSize = nodeElement.querySelector('.file-size');
-    const previewSection = nodeElement.querySelector('.node-preview-section');
+    const uploadArea = nodeElement.querySelector('.upload-area');
     
     if (file) {
-        // 隐藏上传区域，显示文件信息
-        if (uploadArea) uploadArea.style.display = 'none';
-        if (fileInfo) fileInfo.style.display = 'flex';
-        
-        // 更新文件信息
         if (fileName) fileName.textContent = file.name;
         if (fileSize) fileSize.textContent = formatFileSize(file.size);
-        
-        // 更新预览
-        const nodeInfo = videoNodes.find(node => node.element === nodeElement);
-        if (nodeInfo) {
-            nodeInfo.file = file;
-            updateFilePreview(nodeInfo);
-        }
-        if (previewSection) previewSection.style.display = 'block';
+        if (fileInfo) fileInfo.style.display = 'block';
+        if (uploadArea) uploadArea.style.display = 'none';
     } else {
-        // 显示上传区域，隐藏文件信息
-        if (uploadArea) uploadArea.style.display = 'block';
         if (fileInfo) fileInfo.style.display = 'none';
-        if (previewSection) previewSection.style.display = 'none';
-    }
-}
-
-// 更新节点状态
-function updateNodeStatus(nodeElement, status) {
-    const nodeId = nodeElement.id;
-    const nodeInfo = videoNodes.find(node => node.id === nodeId);
-    
-    if (nodeInfo) {
-        nodeInfo.status = status;
-        nodeElement.dataset.status = status;
-        
-        const statusIndicator = nodeElement.querySelector('.node-status-indicator');
-        if (statusIndicator) {
-            statusIndicator.dataset.status = status;
-        }
-    }
-}
-
-// 更新节点进度
-function updateNodeProgress(nodeElement, progress) {
-    const nodeId = nodeElement.id;
-    const nodeInfo = videoNodes.find(node => node.id === nodeId);
-    
-    if (nodeInfo) {
-        nodeInfo.progress = progress;
-        
-        const progressFill = nodeElement.querySelector('.progress-fill');
-        const progressText = nodeElement.querySelector('.progress-text');
-        
-        if (progressFill) {
-            progressFill.style.width = `${progress}%`;
-        }
-        
-        if (progressText) {
-            progressText.textContent = `${Math.round(progress)}%`;
-        }
+        if (uploadArea) uploadArea.style.display = 'block';
     }
 }
 
 // 格式化文件大小
 function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
-    
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-// 删除旧版本的updateFilePreview函数，使用下面的新版本
-
-// 更新合并按钮状态
-function updateMergeButtonState() {
-    const mergeBtn = document.getElementById('mergeVideosBtn');
-    if (!mergeBtn) return;
-    
-    const hasFiles = videoNodes.some(node => node.file);
-    mergeBtn.disabled = !hasFiles;
-}
-
-// 移动节点向上
-function moveNodeUp(nodeId) {
-    const nodeIndex = videoNodes.findIndex(node => node.id === nodeId);
-    if (nodeIndex > 0) {
-        // 交换数组中的位置
-        [videoNodes[nodeIndex], videoNodes[nodeIndex - 1]] = [videoNodes[nodeIndex - 1], videoNodes[nodeIndex]];
-        
-        // 重新渲染节点列表
-        renderVideoNodes();
-    }
-}
-
-// 移动节点向下
-function moveNodeDown(nodeId) {
-    const nodeIndex = videoNodes.findIndex(node => node.id === nodeId);
-    if (nodeIndex < videoNodes.length - 1) {
-        // 交换数组中的位置
-        [videoNodes[nodeIndex], videoNodes[nodeIndex + 1]] = [videoNodes[nodeIndex + 1], videoNodes[nodeIndex]];
-        
-        // 重新渲染节点列表
-        renderVideoNodes();
-    }
-}
-
-// 重新渲染所有节点
-function renderVideoNodes() {
-    const container = document.getElementById('videoNodesList');
-    if (!container) return;
-    
-    // 清空容器
-    container.innerHTML = '';
-    
-    // 重新添加所有节点
-    videoNodes.forEach((nodeInfo, index) => {
-        const nodeElement = createNodeElement(nodeInfo.id, nodeInfo.type);
-        container.appendChild(nodeElement);
-        
-        // 恢复文件信息
-        if (nodeInfo.file) {
-            updateNodeFileDisplay(nodeElement, nodeInfo.file);
-        }
-        
-        // 恢复状态
-        updateNodeStatus(nodeElement, nodeInfo.status || 'empty');
-        
-        // 恢复进度
-        if (nodeInfo.progress) {
-            updateNodeProgress(nodeElement, nodeInfo.progress);
-        }
-        
-        // 更新nodeInfo的element引用
-        nodeInfo.element = nodeElement;
-        
-        // 重新绑定事件
-        bindNodeEvents(nodeInfo);
-    });
-    
-    // 更新空状态显示
-    updateEmptyState();
-}
-
-// 获取拖拽后的插入位置
-function getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('.workflow-node:not(.dragging)')];
-    
-    return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
-        }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
-}
-
-// 更新节点顺序
-function updateNodeOrder() {
-    const container = document.getElementById('videoNodesList');
-    if (!container) return;
-    
-    const nodeElements = [...container.querySelectorAll('.workflow-node')];
-    const newOrder = [];
-    
-    nodeElements.forEach(element => {
-        const nodeId = element.id;
-        const nodeInfo = videoNodes.find(node => node.id === nodeId);
-        if (nodeInfo) {
-            newOrder.push(nodeInfo);
-        }
-    });
-    
-    // 更新videoNodes数组
-    videoNodes.length = 0;
-    videoNodes.push(...newOrder);
-    
-    // 更新节点编号
-    updateNodeNumbers();
 }
 
 // 创建节点元素
 function createNodeElement(nodeId, nodeType) {
     const template = document.getElementById('videoNodeTemplate');
-    if (!template) return null;
+    if (!template) {
+        console.error('Node template not found');
+        return null;
+    }
     
     const nodeElement = template.cloneNode(true);
-    nodeElement.id = nodeId;
+    nodeElement.id = `node-${nodeId}`;
     nodeElement.style.display = 'block';
-    nodeElement.dataset.type = nodeType;
-    nodeElement.dataset.status = 'empty';
+    nodeElement.setAttribute('data-node-id', nodeId);
     
-    // 更新节点标题和图标
+    // 设置节点标题和图标
     const nodeTitle = nodeElement.querySelector('.node-title');
-    const typeIcon = nodeElement.querySelector('.node-type-icon');
-    const uploadText = nodeElement.querySelector('.upload-text');
+    const typeIcon = nodeElement.querySelector('.type-icon');
     
     if (nodeTitle) {
-        nodeTitle.textContent = nodeType === 'video' ? '视频节点' : '音频节点';
+        nodeTitle.textContent = nodeType === 'video' ? `视频节点 ${nodeId}` : `音频节点 ${nodeId}`;
     }
     
     if (typeIcon) {
         typeIcon.textContent = nodeType === 'video' ? '🎬' : '🎵';
     }
     
-    if (uploadText) {
-        uploadText.textContent = nodeType === 'video' ? '点击或拖拽视频文件到此处' : '点击或拖拽音频文件到此处';
-    }
-    
     return nodeElement;
 }
 
-// 更新空状态显示
-function updateEmptyState() {
+// 渲染视频节点
+function renderVideoNodesWithInsertionPoints() {
     const container = document.getElementById('videoNodesList');
-    const emptyState = document.querySelector('.empty-state');
+    if (!container) return;
     
-    if (!container || !emptyState) return;
+    container.innerHTML = '';
     
     if (videoNodes.length === 0) {
-        emptyState.style.display = 'flex';
-    } else {
-        emptyState.style.display = 'none';
-    }
-}
-
-// 更新文件预览
-function updateFilePreview(nodeInfo) {
-    const nodeId = nodeInfo.id;
-    const file = nodeInfo.file;
-    const nodeElement = nodeInfo.element;
-    
-    if (!file) return;
-    
-    const previewSection = nodeElement.querySelector('.node-preview-section');
-    if (!previewSection) return;
-    
-    // 清除现有预览
-    previewSection.innerHTML = '';
-    
-    // 创建预览容器
-    const previewContainer = document.createElement('div');
-    previewContainer.className = 'preview-container';
-    
-    // 创建媒体播放器
-    let mediaElement;
-    if (file.type.startsWith('video/')) {
-        mediaElement = document.createElement('video');
-        mediaElement.className = 'node-video-player';
-        mediaElement.controls = true;
-        mediaElement.preload = 'metadata';
-    } else if (file.type.startsWith('audio/')) {
-        mediaElement = document.createElement('audio');
-        mediaElement.className = 'node-audio-player';
-        mediaElement.controls = true;
-        mediaElement.preload = 'metadata';
+        container.innerHTML = '<div class="empty-state">点击下方按钮添加视频或音频节点</div>';
+        return;
     }
     
-    if (mediaElement) {
-        const objectURL = URL.createObjectURL(file);
-        mediaElement.src = objectURL;
-        
-        // 添加元数据加载事件
-        mediaElement.addEventListener('loadedmetadata', () => {
-            updateMediaMetadata(nodeElement, file, mediaElement);
-        });
-        
-        previewContainer.appendChild(mediaElement);
-    }
-    
-    // 创建文件信息区域
-    const fileInfo = document.createElement('div');
-    fileInfo.className = 'file-info';
-    fileInfo.innerHTML = `
-        <div class="file-basic-info">
-            <span class="file-name" title="${file.name}">${file.name}</span>
-            <span class="file-size">${formatFileSize(file.size)}</span>
-            <span class="file-type">${file.type}</span>
-        </div>
-        <div class="file-metadata" id="metadata-${nodeId}">
-            <span class="loading-metadata">正在加载媒体信息...</span>
-        </div>
-    `;
-    
-    previewContainer.appendChild(fileInfo);
-    previewSection.appendChild(previewContainer);
-}
-
-// 更新媒体元数据信息
-function updateMediaMetadata(nodeElement, file, mediaElement) {
-    const nodeId = nodeElement.id;
-    const metadataContainer = document.getElementById(`metadata-${nodeId}`);
-    
-    if (!metadataContainer) return;
-    
-    let metadataHTML = '';
-    
-    if (file.type.startsWith('video/')) {
-        const duration = formatDuration(mediaElement.duration);
-        const resolution = `${mediaElement.videoWidth} × ${mediaElement.videoHeight}`;
-        
-        metadataHTML = `
-            <div class="metadata-item">
-                <span class="metadata-label">时长:</span>
-                <span class="metadata-value">${duration}</span>
-            </div>
-            <div class="metadata-item">
-                <span class="metadata-label">分辨率:</span>
-                <span class="metadata-value">${resolution}</span>
-            </div>
-        `;
-    } else if (file.type.startsWith('audio/')) {
-        const duration = formatDuration(mediaElement.duration);
-        
-        metadataHTML = `
-            <div class="metadata-item">
-                <span class="metadata-label">时长:</span>
-                <span class="metadata-value">${duration}</span>
-            </div>
-        `;
-    }
-    
-    metadataContainer.innerHTML = metadataHTML;
-}
-
-// 格式化时长
-function formatDuration(seconds) {
-    if (isNaN(seconds) || seconds < 0) return '未知';
-    
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    
-    if (hours > 0) {
-        return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    } else {
-        return `${minutes}:${secs.toString().padStart(2, '0')}`;
-    }
-}
-
-// 根据合并类型更新节点显示
-function updateNodesByMergeType() {
-    const mergeType = document.getElementById('mergeType').value;
-    
-    // 获取添加节点按钮
-    const addNodeBtn = document.getElementById('addVideoNodeBtn');
-    
-    // 根据合并类型设置节点限制和显示
-    switch (mergeType) {
-        case 'video_only':
-            // 仅视频合并模式 - 允许多个视频节点
-            addNodeBtn.style.display = 'block';
-            
-            // 所有节点都是视频类型
-            videoNodes.forEach(node => {
-                const nodeTypeSelect = node.element.querySelector('.node-type-select');
-                if (nodeTypeSelect) {
-                    nodeTypeSelect.value = 'video';
-                    nodeTypeSelect.disabled = true;
-                    node.type = 'video';
-                }
-                updateNodeDisplay(node);
-            });
-            break;
-            
-        case 'audio_video':
-            // 音频与视频合并模式 - 限制为一个音频和一个视频
-            if (videoNodes.length >= 2) {
-                addNodeBtn.style.display = 'none';
-            } else {
-                addNodeBtn.style.display = 'block';
-            }
-            
-            // 如果有两个节点，确保一个是音频一个是视频
-            if (videoNodes.length === 2) {
-                const firstNodeTypeSelect = videoNodes[0].element.querySelector('.node-type-select');
-                const secondNodeTypeSelect = videoNodes[1].element.querySelector('.node-type-select');
-                
-                if (firstNodeTypeSelect && secondNodeTypeSelect) {
-                    if (firstNodeTypeSelect.value === secondNodeTypeSelect.value) {
-                        // 如果两个节点类型相同，将第二个节点设置为不同类型
-                        secondNodeTypeSelect.value = firstNodeTypeSelect.value === 'video' ? 'audio' : 'video';
-                        videoNodes[1].type = secondNodeTypeSelect.value;
-                    }
-                }
-            }
-            
-            // 启用节点类型选择
-            videoNodes.forEach(node => {
-                const nodeTypeSelect = node.element.querySelector('.node-type-select');
-                if (nodeTypeSelect) {
-                    nodeTypeSelect.disabled = false;
-                }
-                updateNodeDisplay(node);
-            });
-            break;
-            
-        case 'multiple_videos':
-            // 多个视频合并模式 - 允许多个视频节点
-            addNodeBtn.style.display = 'block';
-            
-            // 所有节点都是视频类型
-            videoNodes.forEach(node => {
-                const nodeTypeSelect = node.element.querySelector('.node-type-select');
-                if (nodeTypeSelect) {
-                    nodeTypeSelect.value = 'video';
-                    nodeTypeSelect.disabled = true;
-                    node.type = 'video';
-                }
-                updateNodeDisplay(node);
-            });
-            break;
-    }
-    
-    // 更新合并按钮状态
-    updateMergeButtonState();
-}
-
-// 更新节点显示
-function updateNodeDisplay(nodeInfo) {
-    const nodeElement = nodeInfo.element;
-    const videoPlayer = nodeElement.querySelector('.node-video-player');
-    const audioPlayer = nodeElement.querySelector('.node-audio-player');
-    
-    if (nodeInfo.type === 'audio') {
-        // 音频模式
-        if (audioPlayer) audioPlayer.style.display = nodeInfo.file ? 'block' : 'none';
-        if (videoPlayer) videoPlayer.style.display = 'none';
-    } else {
-        // 视频模式
-        if (videoPlayer) videoPlayer.style.display = nodeInfo.file ? 'block' : 'none';
-        if (audioPlayer) audioPlayer.style.display = 'none';
-    }
-}
-
-// 更新节点编号
-function updateNodeNumbers() {
-    videoNodes.forEach((node, index) => {
-        const titleElement = node.element.querySelector('.node-title');
-        if (titleElement) {
-            titleElement.textContent = `节点 #${index + 1}`;
+    videoNodes.forEach((nodeInfo, index) => {
+        if (nodeInfo.element) {
+            container.appendChild(nodeInfo.element);
         }
     });
 }
 
-// 删除节点
+// 移除节点
 function removeNode(nodeId) {
     const nodeIndex = videoNodes.findIndex(node => node.id === nodeId);
-    if (nodeIndex === -1) return;
-    
-    // 从DOM中移除
-    const nodeElement = videoNodes[nodeIndex].element;
-    nodeElement.parentNode.removeChild(nodeElement);
-    
-    // 从数组中移除
-    videoNodes.splice(nodeIndex, 1);
-    
-    // 更新节点编号
-    updateNodeNumbers();
-    
-    // 如果没有节点了，显示空消息
-    if (videoNodes.length === 0) {
-        document.getElementById('videoNodesList').innerHTML = `
-            <div class="empty-nodes-message">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                    <circle cx="12" cy="12" r="4"></circle>
-                    <line x1="12" y1="8" x2="12" y2="16"></line>
-                    <line x1="8" y1="12" x2="16" y2="12"></line>
-                </svg>
-                <p>暂无视频节点，请点击"添加视频节点"按钮</p>
-            </div>
-        `;
+    if (nodeIndex !== -1) {
+        videoNodes.splice(nodeIndex, 1);
+        renderVideoNodesWithInsertionPoints();
+        updateMergeButtonState();
     }
-    
-    // 更新合并按钮状态
-    updateMergeButtonState();
 }
 
 // 清空所有节点
-function clearVideoNodes() {
-    // 清空DOM
-    document.getElementById('videoNodesList').innerHTML = `
-        <div class="empty-nodes-message">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <circle cx="12" cy="12" r="4"></circle>
-                <line x1="12" y1="8" x2="12" y2="16"></line>
-                <line x1="8" y1="12" x2="16" y2="12"></line>
-            </svg>
-            <p>暂无视频节点，请点击"添加视频节点"按钮</p>
-        </div>
-    `;
-    
-    // 清空数组
+function clearVideoNodes(showMessage = true) {
     videoNodes = [];
-    
-    // 更新合并按钮状态
+    renderVideoNodesWithInsertionPoints();
     updateMergeButtonState();
+    
+    if (showMessage) {
+        showToast('已清空所有节点', 'info');
+    }
 }
 
 // 更新合并按钮状态
 function updateMergeButtonState() {
     const mergeButton = document.getElementById('mergeVideos');
-    
-    // 检查是否有至少两个节点且都选择了视频或上传了文件
-    const validNodes = videoNodes.filter(node => node.file || node.videoId);
-    const canMerge = validNodes.length >= 2;
-    
-    mergeButton.disabled = !canMerge;
+    if (mergeButton) {
+        const hasValidNodes = videoNodes.some(node => node.file);
+        mergeButton.disabled = !hasValidNodes;
+    }
 }
 
 // 合并视频
 async function mergeVideos() {
-    // 隐藏结果区域
-    document.getElementById('mergeResultSection').style.display = 'none';
+    const validNodes = videoNodes.filter(node => node.file);
     
-    // 显示进度区域
-    const progressSection = document.getElementById('mergeTaskProgress');
-    progressSection.style.display = 'block';
-    
-    // 更新进度状态
-    updateMergeStepStatus('merge-validate-status', '处理中');
-    updateMergeStepStatus('merge-process-status', '待处理');
-    updateMergeStepStatus('merge-complete-status', '待处理');
-    
-    // 初始化所有节点状态为处理中
-    videoNodes.forEach(node => {
-        const nodeElement = document.getElementById(node.id);
-        if (nodeElement && node.file) {
-            updateNodeStatus(nodeElement, 'processing');
-            updateNodeProgress(nodeElement, 0);
-        }
-    });
-    
-    // 准备请求数据
-    const formData = new FormData();
-    
-    // 添加配置信息
-    const configForm = document.getElementById('mergeConfigForm');
-    const outputName = configForm.elements['outputName'].value || 'merged_video';
-    const outputFormat = configForm.elements['outputFormat'].value || 'mp4';
-    const apiKey = configForm.elements['apiKey'].value || '';
-    
-    formData.append('output_name', outputName);
-    formData.append('output_format', outputFormat);
-    formData.append('api_key', apiKey);
-    
-    // 添加合并引擎选择（火山引擎集成）
-    const mergeEngine = configForm.elements['mergeEngine'] ? 
-        configForm.elements['mergeEngine'].value : 'default';
-    formData.append('engine', mergeEngine);
-    
-    // 添加视频文件
-    let hasFiles = false;
-    videoNodes.forEach((node, index) => {
-        if (node.file) {
-            formData.append(`video_${index}`, node.file);
-            hasFiles = true;
-        } else if (node.videoId) {
-            formData.append(`video_id_${index}`, node.videoId);
-        }
-    });
+    if (validNodes.length === 0) {
+        showToast('请至少添加一个文件', 'warning');
+        return;
+    }
     
     try {
-        // 发送合并请求
-        let response;
-        if (hasFiles) {
-            // 如果有文件，使用FormData
-            response = await fetch('/merge_videos_upload', {
-                method: 'POST',
-                body: formData
-            });
-        } else {
-            // 否则使用JSON
-            const videoIds = videoNodes
-                .filter(node => node.videoId)
-                .map(node => node.videoId);
-                
-            response = await fetch('/merge_videos_task', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    video_ids: videoIds,
-                    output_name: outputName,
-                    output_format: outputFormat,
-                    api_key: apiKey,
-                    engine: mergeEngine
-                })
-            });
-        }
+        const formData = new FormData();
+        
+        // 添加文件
+        validNodes.forEach((node, index) => {
+            formData.append('files', node.file);
+        });
+        
+        // 添加配置
+        const config = {
+            output_filename: document.getElementById('outputFilename')?.value || 'merged_video',
+            output_format: document.getElementById('outputFormat')?.value || 'mp4'
+        };
+        
+        formData.append('config', JSON.stringify(config));
+        
+        showToast('开始合并视频...', 'info');
+        
+        const response = await fetch('/merge_videos_upload', {
+            method: 'POST',
+            body: formData
+        });
         
         const result = await response.json();
         
         if (result.success) {
-            // 更新验证状态
-            updateMergeStepStatus('merge-validate-status', '完成');
-            updateMergeStepStatus('merge-process-status', '处理中');
-            
-            // 开始轮询合并状态
+            showMergeTaskProgress(result.task_id);
             pollMergeStatus(result.task_id);
         } else {
-            updateMergeStepStatus('merge-validate-status', '失败');
-            showToast('视频合并请求失败: ' + result.error, 'error');
+            showToast('合并失败: ' + result.error, 'error');
         }
     } catch (error) {
-        console.error('Error merging videos:', error);
-        updateMergeStepStatus('merge-validate-status', '失败');
-        showToast('视频合并请求失败，请检查网络连接', 'error');
+        console.error('Merge error:', error);
+        showToast('合并过程中发生错误', 'error');
     }
 }
 
 // 轮询合并状态
 async function pollMergeStatus(taskId) {
-    try {
-        const response = await fetch(`/merge_task_status/${taskId}`);
-        const result = await response.json();
-        
-        // 更新进度条（如果有进度信息）
-        if (result.progress !== undefined) {
-            const progressPercent = Math.min(Math.max(result.progress, 0), 100);
-            updateMergeProgress(progressPercent);
+    updateMergeTaskStepStatus('merge-validate-status', '处理中');
+    updateMergeTaskStepStatus('merge-process-status', '处理中');
+    
+    const pollInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`/task_status/${taskId}`);
+            const result = await response.json();
             
-            // 更新节点进度
-            updateNodesProgress(progressPercent);
-        }
-        
-        // 更新节点状态（如果有节点级别的状态信息）
-        if (result.node_status) {
-            updateNodesStatus(result.node_status);
-        }
-        
-        if (result.status === 'completed') {
-            // 更新状态
-            updateMergeStepStatus('merge-process-status', '完成');
-            updateMergeStepStatus('merge-complete-status', '完成');
-            
-            // 将所有节点标记为完成
-            videoNodes.forEach(node => {
-                const nodeElement = document.getElementById(node.id);
-                if (nodeElement && node.file) {
-                    updateNodeStatus(nodeElement, 'completed');
-                    updateNodeProgress(nodeElement, 100);
-                }
-            });
-            
-            // 显示结果
-            showMergeResult(result.output_url || result.video_url, result.output_url || result.download_url);
-        } else if (result.status === 'failed') {
-            updateMergeStepStatus('merge-process-status', '失败');
-            
-            // 将所有节点标记为错误
-            videoNodes.forEach(node => {
-                const nodeElement = document.getElementById(node.id);
-                if (nodeElement && node.file) {
-                    updateNodeStatus(nodeElement, 'error');
-                }
-            });
-            
-            showToast('视频合并失败: ' + (result.error || '未知错误'), 'error');
-        } else {
-            // 继续轮询
-            setTimeout(() => pollMergeStatus(taskId), 2000);
-        }
-    } catch (error) {
-        console.error('Error polling merge status:', error);
-        updateMergeStepStatus('merge-process-status', '失败');
-        
-        // 将所有节点标记为错误
-        videoNodes.forEach(node => {
-            const nodeElement = document.getElementById(node.id);
-            if (nodeElement && node.file) {
-                updateNodeStatus(nodeElement, 'error');
+            if (result.status === 'completed') {
+                clearInterval(pollInterval);
+                updateMergeTaskStepStatus('merge-validate-status', '已完成');
+                updateMergeTaskStepStatus('merge-process-status', '已完成');
+                updateMergeTaskStepStatus('merge-complete-status', '已完成');
+                showMergeResult(result.video_url, result.download_url);
+                showToast('视频合并完成！', 'success');
+            } else if (result.status === 'failed') {
+                clearInterval(pollInterval);
+                updateMergeTaskStepStatus('merge-validate-status', '失败');
+                updateMergeTaskStepStatus('merge-process-status', '失败');
+                updateMergeTaskStepStatus('merge-complete-status', '失败');
+                showToast('合并失败: ' + result.error, 'error');
             }
-        });
-        
-        showToast('检查合并状态失败，请检查网络连接', 'error');
-    }
-}
-
-// 更新合并步骤状态
-function updateMergeStepStatus(statusId, status) {
-    const statusElement = document.getElementById(statusId);
-    if (statusElement) {
-        statusElement.textContent = status;
-        statusElement.className = 'step-status ' + status.toLowerCase();
-    }
-}
-
-// 更新所有节点进度
-function updateNodesProgress(overallProgress) {
-    videoNodes.forEach((node, index) => {
-        const nodeElement = document.getElementById(node.id);
-        if (nodeElement && node.file) {
-            // 为每个节点分配进度（简单平均分配）
-            const nodeProgress = Math.min(overallProgress, 100);
-            updateNodeProgress(nodeElement, nodeProgress);
+        } catch (error) {
+            console.error('Status polling error:', error);
+            clearInterval(pollInterval);
+            showToast('状态查询失败', 'error');
         }
-    });
-}
-
-// 更新节点状态（基于服务器返回的节点状态）
-function updateNodesStatus(nodeStatusData) {
-    if (!nodeStatusData || typeof nodeStatusData !== 'object') return;
-    
-    videoNodes.forEach((node, index) => {
-        const nodeElement = document.getElementById(node.id);
-        if (nodeElement && node.file) {
-            const nodeStatus = nodeStatusData[index] || nodeStatusData[node.id];
-            if (nodeStatus) {
-                updateNodeStatus(nodeElement, nodeStatus.status || 'processing');
-                if (nodeStatus.progress !== undefined) {
-                    updateNodeProgress(nodeElement, nodeStatus.progress);
-                }
-            }
-        }
-    });
-}
-
-// 更新整体合并进度
-function updateMergeProgress(progress) {
-    const progressBar = document.querySelector('.task-progress-bar .progress-fill');
-    const progressText = document.querySelector('.task-progress-text');
-    
-    if (progressBar) {
-        progressBar.style.width = `${progress}%`;
-    }
-    
-    if (progressText) {
-        progressText.textContent = `${Math.round(progress)}%`;
-    }
+    }, 2000);
 }
 
 // 显示合并结果
 function showMergeResult(videoUrl, downloadUrl) {
     const resultSection = document.getElementById('mergeResultSection');
-    resultSection.style.display = 'block';
-    
-    // 设置视频播放器
-    const videoPlayer = document.getElementById('mergeResultVideo');
-    videoPlayer.src = videoUrl;
-    videoPlayer.style.display = 'block';
-    
-    // 设置下载链接
+    const resultVideo = document.getElementById('mergeResultVideo');
     const downloadLink = document.getElementById('mergeDownloadLink');
-    downloadLink.href = downloadUrl;
-    downloadLink.style.display = 'inline-block';
     
-    // 显示创建新合并按钮
-    document.getElementById('createNewMerge').style.display = 'inline-block';
-    
-    // 显示成功提示
-    showToast('视频合并完成！', 'success');
+    if (resultSection && resultVideo && downloadLink) {
+        resultVideo.src = videoUrl;
+        downloadLink.href = downloadUrl;
+        resultSection.style.display = 'block';
+        
+        // 显示视频和下载链接
+        resultVideo.style.display = 'block';
+        downloadLink.style.display = 'inline-block';
+        
+        // 显示创建新合并按钮
+        const createNewButton = document.getElementById('createNewMerge');
+        if (createNewButton) {
+            createNewButton.style.display = 'inline-block';
+        }
+    }
 }
 
 // 重置合并模式
 function resetMergeMode() {
-    // 清空节点
-    clearVideoNodes();
+    clearVideoNodes(false);
     
-    // 隐藏进度和结果区域
-    document.getElementById('mergeTaskProgress').style.display = 'none';
-    document.getElementById('mergeResultSection').style.display = 'none';
+    const resultSection = document.getElementById('mergeResultSection');
+    const taskProgress = document.getElementById('mergeTaskProgress');
     
-    // 重置表单
-    document.getElementById('mergeConfigForm').reset();
+    if (resultSection) {
+        resultSection.style.display = 'none';
+    }
+    
+    if (taskProgress) {
+        taskProgress.style.display = 'none';
+    }
+    
+    showToast('已重置合并模式', 'info');
 }
 
-// 更新所有视频选择下拉框
-function updateAllVideoSelects() {
-    // 这个函数用于更新视频节点中的选择列表
-    // 目前为空实现，可以根据需要添加功能
-}
-
-// 显示Toast消息
+// 显示提示消息
 function showToast(message, type = 'info') {
-    const toast = document.getElementById('toast');
+    console.log(`[${type.toUpperCase()}] ${message}`);
+    
+    // 简单的提示实现
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
     toast.textContent = message;
-    toast.className = `toast ${type} show`;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 12px 20px;
+        border-radius: 4px;
+        color: white;
+        z-index: 10000;
+        max-width: 300px;
+    `;
+    
+    switch (type) {
+        case 'success':
+            toast.style.backgroundColor = '#4CAF50';
+            break;
+        case 'error':
+            toast.style.backgroundColor = '#f44336';
+            break;
+        case 'warning':
+            toast.style.backgroundColor = '#ff9800';
+            break;
+        default:
+            toast.style.backgroundColor = '#2196F3';
+    }
+    
+    document.body.appendChild(toast);
     
     setTimeout(() => {
-        toast.classList.remove('show');
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
     }, 3000);
 }
 
-// 初始化首尾帧上传功能
+// 首尾帧生成模块
 function initializeFirstLastUpload() {
-    // 首帧上传
     const startFrameUploadArea = document.getElementById('startFrameUploadArea');
     const startFrameInput = document.getElementById('startFrameInput');
-    const startFramePreview = document.getElementById('startFramePreview');
-    
-    // 尾帧上传
     const endFrameUploadArea = document.getElementById('endFrameUploadArea');
     const endFrameInput = document.getElementById('endFrameInput');
-    const endFramePreview = document.getElementById('endFramePreview');
-    
-    // 生成按钮和清空按钮
-    const generateButton = document.getElementById('generateFirstLastVideo');
     const clearButton = document.getElementById('clearFirstLastImages');
+    const generateButton = document.getElementById('generateFirstLastVideo');
     
+    // 开始帧上传
     if (startFrameUploadArea && startFrameInput) {
-        // 首帧上传区域点击事件
-        startFrameUploadArea.addEventListener('click', function() {
-            startFrameInput.click();
-        });
+        startFrameUploadArea.addEventListener('click', () => startFrameInput.click());
         
-        // 首帧文件选择事件
         startFrameInput.addEventListener('change', function() {
             if (this.files.length > 0) {
-                const file = this.files[0];
-                handleImagePreview(file, startFramePreview, 'start');
-                updateFirstLastButtonState();
-            }
-        });
-        
-        // 首帧拖拽上传
-        startFrameUploadArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            this.classList.add('drag-over');
-        });
-        
-        startFrameUploadArea.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            this.classList.remove('drag-over');
-        });
-        
-        startFrameUploadArea.addEventListener('drop', function(e) {
-            e.preventDefault();
-            this.classList.remove('drag-over');
-            const files = e.dataTransfer.files;
-            if (files.length > 0 && files[0].type.startsWith('image/')) {
-                startFrameInput.files = files;
-                handleImagePreview(files[0], startFramePreview, 'start');
+                handleImagePreview(this.files[0], document.getElementById('startFramePreview'), 'start');
                 updateFirstLastButtonState();
             }
         });
     }
     
+    // 结束帧上传
     if (endFrameUploadArea && endFrameInput) {
-        // 尾帧上传区域点击事件
-        endFrameUploadArea.addEventListener('click', function() {
-            endFrameInput.click();
-        });
+        endFrameUploadArea.addEventListener('click', () => endFrameInput.click());
         
-        // 尾帧文件选择事件
         endFrameInput.addEventListener('change', function() {
             if (this.files.length > 0) {
-                const file = this.files[0];
-                handleImagePreview(file, endFramePreview, 'end');
-                updateFirstLastButtonState();
-            }
-        });
-        
-        // 尾帧拖拽上传
-        endFrameUploadArea.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            this.classList.add('drag-over');
-        });
-        
-        endFrameUploadArea.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            this.classList.remove('drag-over');
-        });
-        
-        endFrameUploadArea.addEventListener('drop', function(e) {
-            e.preventDefault();
-            this.classList.remove('drag-over');
-            const files = e.dataTransfer.files;
-            if (files.length > 0 && files[0].type.startsWith('image/')) {
-                endFrameInput.files = files;
-                handleImagePreview(files[0], endFramePreview, 'end');
+                handleImagePreview(this.files[0], document.getElementById('endFramePreview'), 'end');
                 updateFirstLastButtonState();
             }
         });
     }
     
-    // 清空图片按钮
+    // 清空按钮
     if (clearButton) {
         clearButton.addEventListener('click', function() {
-            // 清空文件输入
             if (startFrameInput) startFrameInput.value = '';
             if (endFrameInput) endFrameInput.value = '';
             
-            // 清空预览
-            if (startFramePreview) startFramePreview.innerHTML = '';
-            if (endFramePreview) endFramePreview.innerHTML = '';
+            const startPreview = document.getElementById('startFramePreview');
+            const endPreview = document.getElementById('endFramePreview');
+            if (startPreview) startPreview.innerHTML = '';
+            if (endPreview) endPreview.innerHTML = '';
             
-            // 更新按钮状态
             updateFirstLastButtonState();
-            
-            showToast('图片已清空', 'info');
         });
     }
     
-    // 生成视频按钮
+    // 生成按钮
     if (generateButton) {
-        generateButton.addEventListener('click', function() {
-            generateFirstLastVideo();
+        generateButton.addEventListener('click', generateFirstLastVideo);
+    }
+    
+    // 生成新视频按钮
+    const generateAnotherButton = document.getElementById('generateAnotherVideo');
+    if (generateAnotherButton) {
+        generateAnotherButton.addEventListener('click', function() {
+            // 隐藏结果区域
+            const resultSection = document.getElementById('firstLastResultSection');
+            const taskProgress = document.getElementById('firstLastTaskProgress');
+            if (resultSection) resultSection.style.display = 'none';
+            if (taskProgress) taskProgress.style.display = 'none';
+            
+            // 清空表单
+            if (startFrameInput) startFrameInput.value = '';
+            if (endFrameInput) endFrameInput.value = '';
+            
+            const startPreview = document.getElementById('startFramePreview');
+            const endPreview = document.getElementById('endFramePreview');
+            if (startPreview) startPreview.innerHTML = '';
+            if (endPreview) endPreview.innerHTML = '';
+            
+            updateFirstLastButtonState();
         });
     }
 }
 
 // 处理图片预览
 function handleImagePreview(file, previewElement, type) {
-    if (!file || !previewElement) return;
+    if (!previewElement) return;
     
     const reader = new FileReader();
     reader.onload = function(e) {
-        previewElement.innerHTML = `
-            <img src="${e.target.result}" alt="${type} frame preview" style="max-width: 100%; max-height: 200px; border-radius: 4px;">
-            <p class="file-name">${file.name}</p>
-        `;
+        previewElement.innerHTML = `<img src="${e.target.result}" alt="${type} frame" style="max-width: 100%; height: auto;">`;
     };
     reader.readAsDataURL(file);
 }
 
-// 更新首尾帧生成按钮状态
+// 更新首尾帧按钮状态
 function updateFirstLastButtonState() {
     const generateButton = document.getElementById('generateFirstLastVideo');
     const startFrameInput = document.getElementById('startFrameInput');
     
     if (generateButton && startFrameInput) {
-        // 至少需要首帧才能生成
-        const hasStartFrame = startFrameInput.files && startFrameInput.files.length > 0;
-        generateButton.disabled = !hasStartFrame;
+        generateButton.disabled = !startFrameInput.files || startFrameInput.files.length === 0;
     }
 }
 
@@ -1313,380 +582,361 @@ function updateFirstLastButtonState() {
 async function generateFirstLastVideo() {
     const startFrameInput = document.getElementById('startFrameInput');
     const endFrameInput = document.getElementById('endFrameInput');
-    const form = document.getElementById('firstLastConfigForm');
     
     if (!startFrameInput || !startFrameInput.files || startFrameInput.files.length === 0) {
-        showToast('请先上传首帧图片', 'error');
+        showToast('请选择开始帧图片', 'warning');
         return;
     }
     
     try {
-        // 显示进度
-        const progressSection = document.getElementById('firstLastTaskProgress');
-        if (progressSection) {
-            progressSection.style.display = 'block';
-        }
+        showToast('正在上传图片...', 'info');
         
-        // 1. 先上传图片
-        const formData = new FormData();
-        formData.append('first_frame', startFrameInput.files[0]);
+        // 先上传图片
+        const uploadFormData = new FormData();
+        uploadFormData.append('start_frame', startFrameInput.files[0]);
         
         if (endFrameInput && endFrameInput.files && endFrameInput.files.length > 0) {
-            formData.append('last_frame', endFrameInput.files[0]);
+            uploadFormData.append('end_frame', endFrameInput.files[0]);
         }
-        
-        showToast('正在上传图片...', 'info');
         
         const uploadResponse = await fetch('/upload_firstlast', {
             method: 'POST',
-            body: formData
+            body: uploadFormData
         });
         
-        if (!uploadResponse.ok) {
-            throw new Error('图片上传失败');
-        }
-        
         const uploadResult = await uploadResponse.json();
+        
         if (!uploadResult.success) {
-            throw new Error(uploadResult.error || '图片上传失败');
+            showToast('图片上传失败: ' + uploadResult.error, 'error');
+            return;
         }
         
-        showToast('图片上传成功，开始生成视频...', 'success');
+        showToast('开始生成视频...', 'info');
         
-        // 2. 生成视频
-        const formData2 = new FormData(form);
+        // 获取配置参数
+        const modelId = document.getElementById('firstLastModelName')?.value || 'seedance-1-0-lite-i2v-250428';
+        const apiKey = document.getElementById('firstLastApiKey')?.value || '';
+        const prompt = document.getElementById('firstLastPrompt')?.value || 'Generate a video from first frame to last frame';
+        const seed = document.getElementById('firstLastSeed')?.value || '-1';
+        const temperature = document.getElementById('firstLastTemperature')?.value || '0.7';
+        const resolution = document.getElementById('firstLastRatio')?.value || '1080x1080';
+        const duration = document.getElementById('firstLastDuration')?.value || '5';
+        const fps = document.getElementById('firstLastFps')?.value || '24';
         
-        // 将FormData转换为JSON对象
-        const jsonData = {};
-        for (let [key, value] of formData2.entries()) {
-            jsonData[key] = value;
+        if (!apiKey) {
+            showToast('请输入API密钥', 'warning');
+            return;
         }
+        
+        // 发送生成请求
+        const generateData = {
+            model_name: modelId,
+            api_key: apiKey,
+            prompt: prompt,
+            seed: parseInt(seed),
+            temperature: parseFloat(temperature),
+            ratio: resolution,
+            duration: parseInt(duration),
+            fps: parseInt(fps),
+            watermark: false
+        };
         
         const generateResponse = await fetch('/generate_firstlast', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(jsonData)
+            body: JSON.stringify(generateData)
         });
         
-        if (!generateResponse.ok) {
-            throw new Error('视频生成请求失败');
-        }
-        
         const generateResult = await generateResponse.json();
-        if (!generateResult.success) {
-            throw new Error(generateResult.error || '视频生成失败');
-        }
         
-        showToast('视频生成任务已提交，请等待处理完成...', 'success');
-        
-        // 3. 轮询任务状态
-        if (generateResult.task_id) {
+        if (generateResult.success) {
+            // 显示任务进度
+            showFirstLastTaskProgress(generateResult.task_id);
             pollFirstLastTaskStatus(generateResult.task_id);
+        } else {
+            showToast('生成失败: ' + generateResult.error, 'error');
         }
-        
     } catch (error) {
-        console.error('生成视频失败:', error);
-        showToast('生成视频失败: ' + error.message, 'error');
+        console.error('Generation error:', error);
+        showToast('生成过程中发生错误', 'error');
     }
 }
 
 // 轮询首尾帧任务状态
 function pollFirstLastTaskStatus(taskId) {
+    // 开始时更新生成状态
+    updateTaskStepStatus('generating-status', '处理中');
+    
     const pollInterval = setInterval(async () => {
         try {
             const response = await fetch(`/task_status/${taskId}`);
-            if (!response.ok) {
-                throw new Error('获取任务状态失败');
-            }
-            
             const result = await response.json();
             
             if (result.status === 'completed') {
                 clearInterval(pollInterval);
+                // 更新所有步骤为完成状态
+                updateTaskStepStatus('generating-status', '已完成');
+                updateTaskStepStatus('complete-status', '已完成');
+                showFirstLastResult(result.video_url, result.download_url);
                 showToast('视频生成完成！', 'success');
-                
-                // 显示结果
-                const resultSection = document.getElementById('firstLastResultSection');
-                const resultVideo = document.getElementById('firstLastResultVideo');
-                const downloadLink = document.getElementById('firstLastDownloadLink');
-                
-                if (result.video_url && resultSection && resultVideo && downloadLink) {
-                    resultVideo.src = result.video_url;
-                    resultVideo.style.display = 'block';
-                    downloadLink.href = result.video_url;
-                    downloadLink.style.display = 'inline-block';
-                    resultSection.style.display = 'block';
-                }
-                
             } else if (result.status === 'failed') {
                 clearInterval(pollInterval);
-                showToast('视频生成失败: ' + (result.error || '未知错误'), 'error');
-            } else {
-                // 任务仍在进行中
-                showToast(`任务进行中: ${result.status}`, 'info');
+                updateTaskStepStatus('generating-status', '失败');
+                updateTaskStepStatus('complete-status', '失败');
+                showToast('生成失败: ' + result.error, 'error');
             }
-            
         } catch (error) {
-            console.error('轮询任务状态失败:', error);
+            console.error('Status polling error:', error);
             clearInterval(pollInterval);
-            showToast('获取任务状态失败', 'error');
+            updateTaskStepStatus('generating-status', '失败');
+            showToast('状态查询失败', 'error');
         }
-    }, 3000); // 每3秒轮询一次
+    }, 2000);
 }
 
-// ... existing code ...
+// 显示首尾帧任务进度
+function showFirstLastTaskProgress(taskId) {
+    const taskProgress = document.getElementById('firstLastTaskProgress');
+    const taskIdDisplay = document.getElementById('task-id-display');
+    
+    if (taskProgress) {
+        taskProgress.style.display = 'block';
+    }
+    
+    if (taskIdDisplay) {
+        taskIdDisplay.textContent = `任务ID: ${taskId}`;
+    }
+    
+    // 更新步骤状态
+    updateTaskStepStatus('upload-status', '已完成');
+    updateTaskStepStatus('task-status', '处理中');
+}
 
-// 初始化参考图上传功能
+// 更新任务步骤状态
+function updateTaskStepStatus(stepId, status) {
+    const stepElement = document.getElementById(stepId);
+    if (stepElement) {
+        stepElement.textContent = status;
+        stepElement.className = 'step-status ' + (status === '已完成' ? 'completed' : status === '处理中' ? 'processing' : 'pending');
+    }
+}
+
+// 显示首尾帧结果
+function showFirstLastResult(videoUrl, downloadUrl) {
+    const resultSection = document.getElementById('firstLastResultSection');
+    const resultVideo = document.getElementById('firstLastResultVideo');
+    const downloadLink = document.getElementById('firstLastDownloadLink');
+    
+    if (resultSection && resultVideo && downloadLink) {
+        resultVideo.src = videoUrl;
+        resultVideo.style.display = 'block';
+        downloadLink.href = downloadUrl;
+        downloadLink.style.display = 'inline-block';
+        resultSection.style.display = 'block';
+        
+        // 显示生成新视频按钮
+        const generateAnotherButton = document.getElementById('generateAnotherVideo');
+        if (generateAnotherButton) {
+            generateAnotherButton.style.display = 'inline-block';
+        }
+    }
+}
+
+// 参考图生成模块
 function initializeReferenceUpload() {
-    // 参考图上传区域和输入框
     const referenceUploads = [
-        { area: 'ref1UploadArea', input: 'ref1Input', preview: 'ref1Preview' },
-        { area: 'ref2UploadArea', input: 'ref2Input', preview: 'ref2Preview' },
-        { area: 'ref3UploadArea', input: 'ref3Input', preview: 'ref3Preview' },
-        { area: 'ref4UploadArea', input: 'ref4Input', preview: 'ref4Preview' }
+        { input: 'ref1Input', preview: 'ref1Preview', area: 'ref1UploadArea' },
+        { input: 'ref2Input', preview: 'ref2Preview', area: 'ref2UploadArea' },
+        { input: 'ref3Input', preview: 'ref3Preview', area: 'ref3UploadArea' },
+        { input: 'ref4Input', preview: 'ref4Preview', area: 'ref4UploadArea' }
     ];
-
-    // 为每个参考图上传区域绑定事件
+    
     referenceUploads.forEach(upload => {
         const uploadArea = document.getElementById(upload.area);
         const fileInput = document.getElementById(upload.input);
         const previewElement = document.getElementById(upload.preview);
-
-        if (!uploadArea || !fileInput || !previewElement) return;
-
-        // 点击上传区域触发文件选择
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
-        });
-
-        // 拖拽上传
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('drag-over');
-        });
-
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('drag-over');
-        });
-
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('drag-over');
+        
+        if (uploadArea && fileInput) {
+            uploadArea.addEventListener('click', () => fileInput.click());
             
-            const files = e.dataTransfer.files;
-            if (files.length > 0 && files[0].type.startsWith('image/')) {
-                fileInput.files = files;
-                handleReferenceImagePreview(files[0], previewElement, upload.area);
-                updateReferenceButtonState();
-            }
-        });
-
-        // 文件选择变化事件
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                handleReferenceImagePreview(file, previewElement, upload.area);
-                updateReferenceButtonState();
-            }
-        });
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    handleReferenceImagePreview(file, previewElement, upload.area);
+                    updateReferenceButtonState();
+                }
+            });
+        }
     });
-
-    // 清空参考图按钮
+    
+    // 清空按钮
     const clearButton = document.getElementById('clearReferenceImages');
     if (clearButton) {
         clearButton.addEventListener('click', () => {
             referenceUploads.forEach(upload => {
-                const fileInput = document.getElementById(upload.input);
-                const previewElement = document.getElementById(upload.preview);
-                const uploadArea = document.getElementById(upload.area);
-                
-                if (fileInput) fileInput.value = '';
-                if (previewElement) previewElement.innerHTML = '';
-                if (uploadArea) uploadArea.classList.remove('has-file');
+                const input = document.getElementById(upload.input);
+                const preview = document.getElementById(upload.preview);
+                if (input) input.value = '';
+                if (preview) preview.innerHTML = '';
             });
             updateReferenceButtonState();
         });
     }
-
-    // 生成参考图视频按钮
+    
+    // 生成按钮
     const generateButton = document.getElementById('generateReferenceVideo');
     if (generateButton) {
         generateButton.addEventListener('click', generateReferenceVideo);
     }
 }
 
-// 处理参考图预览
+// 处理参考图片预览
 function handleReferenceImagePreview(file, previewElement, uploadAreaId) {
+    if (!previewElement) return;
+    
     const reader = new FileReader();
     reader.onload = function(e) {
-        previewElement.innerHTML = `
-            <img src="${e.target.result}" alt="参考图预览" style="max-width: 100%; max-height: 200px; border-radius: 8px;">
-        `;
+        previewElement.innerHTML = `<img src="${e.target.result}" alt="Reference image" style="max-width: 100%; height: auto;">`;
         
-        // 添加已上传样式
         const uploadArea = document.getElementById(uploadAreaId);
         if (uploadArea) {
-            uploadArea.classList.add('has-file');
+            uploadArea.style.display = 'none';
         }
     };
     reader.readAsDataURL(file);
 }
 
-// 更新参考图生成按钮状态
+// 更新参考图按钮状态
 function updateReferenceButtonState() {
     const generateButton = document.getElementById('generateReferenceVideo');
-    if (!generateButton) return;
-
-    // 检查是否至少有一张参考图
-    const hasAnyImage = ['ref1Input', 'ref2Input', 'ref3Input', 'ref4Input'].some(inputId => {
-        const input = document.getElementById(inputId);
+    const hasImages = ['ref1Input', 'ref2Input', 'ref3Input', 'ref4Input'].some(id => {
+        const input = document.getElementById(id);
         return input && input.files && input.files.length > 0;
     });
-
-    generateButton.disabled = !hasAnyImage;
+    
+    if (generateButton) {
+        generateButton.disabled = !hasImages;
+    }
 }
 
 // 生成参考图视频
 async function generateReferenceVideo() {
+    const formData = new FormData();
+    let hasFiles = false;
+    
+    ['ref1Input', 'ref2Input', 'ref3Input', 'ref4Input'].forEach((id, index) => {
+        const input = document.getElementById(id);
+        if (input && input.files && input.files.length > 0) {
+            formData.append(`reference_${index + 1}`, input.files[0]);
+            hasFiles = true;
+        }
+    });
+    
+    if (!hasFiles) {
+        showToast('请至少选择一张参考图片', 'warning');
+        return;
+    }
+    
     try {
-        // 显示进度区域
-        const progressSection = document.getElementById('referenceTaskProgress');
-        if (progressSection) {
-            progressSection.style.display = 'block';
-        }
-
-        // 更新步骤状态
-        updateReferenceStepStatus('reference-step-upload', 'processing');
-
-        // 收集参考图文件
-        const formData = new FormData();
-        const referenceInputs = ['ref1Input', 'ref2Input', 'ref3Input', 'ref4Input'];
-        let uploadedCount = 0;
-
-        referenceInputs.forEach(inputId => {
-            const input = document.getElementById(inputId);
-            if (input && input.files && input.files.length > 0) {
-                formData.append('reference_images', input.files[0]);
-                uploadedCount++;
-            }
-        });
-
-        if (uploadedCount === 0) {
-            showToast('请至少上传一张参考图', 'error');
-            return;
-        }
-
-        // 上传参考图
+        showToast('正在上传图片...', 'info');
+        
+        // 先上传图片
         const uploadResponse = await fetch('/upload_reference', {
             method: 'POST',
             body: formData
         });
-
-        const uploadData = await uploadResponse.json();
-        if (!uploadData.success) {
-            throw new Error(uploadData.error || '上传参考图失败');
+        
+        const uploadResult = await uploadResponse.json();
+        
+        if (!uploadResult.success) {
+            showToast('图片上传失败: ' + uploadResult.error, 'error');
+            return;
         }
-
-        updateReferenceStepStatus('reference-step-upload', 'completed');
-        updateReferenceStepStatus('reference-step-task', 'processing');
-
+        
+        showToast('开始生成视频...', 'info');
+        
         // 获取配置参数
-        const configForm = document.getElementById('referenceConfigForm');
-        const formDataConfig = new FormData(configForm);
-        const config = Object.fromEntries(formDataConfig.entries());
-
-        // 生成视频
+        const modelId = document.getElementById('referenceModelName')?.value || 'seedance-1-0-lite-i2v-250428';
+        const apiKey = document.getElementById('referenceApiKey')?.value || '';
+        const prompt = document.getElementById('referencePrompt')?.value || 'Generate a video based on the provided reference images';
+        const seed = document.getElementById('referenceSeed')?.value || '-1';
+        const temperature = document.getElementById('referenceTemperature')?.value || '0.7';
+        const resolution = document.getElementById('referenceRatio')?.value || '1080x1080';
+        const duration = document.getElementById('referenceDuration')?.value || '5';
+        const fps = document.getElementById('referenceFps')?.value || '24';
+        
+        if (!apiKey) {
+            showToast('请输入API密钥', 'warning');
+            return;
+        }
+        
+        // 发送生成请求
+        const generateData = {
+            model_name: modelId,
+            api_key: apiKey,
+            prompt: prompt,
+            seed: parseInt(seed),
+            temperature: parseFloat(temperature),
+            ratio: resolution,
+            duration: parseInt(duration),
+            fps: parseInt(fps),
+            watermark: false
+        };
+        
         const generateResponse = await fetch('/generate_reference', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(config)
+            body: JSON.stringify(generateData)
         });
-
-        const generateData = await generateResponse.json();
-        if (!generateData.success) {
-            throw new Error(generateData.error || '生成视频失败');
-        }
-
-        updateReferenceStepStatus('reference-step-task', 'completed');
-        updateReferenceStepStatus('reference-step-generating', 'processing');
-
-        // 显示任务ID
-        const taskIdDisplay = document.getElementById('reference-task-id-display');
-        if (taskIdDisplay) {
-            taskIdDisplay.textContent = `任务ID: ${generateData.task_id}`;
-        }
-
-        // 开始轮询任务状态
-        pollReferenceTaskStatus(generateData.task_id);
-
-    } catch (error) {
-        console.error('生成参考图视频失败:', error);
-        showToast('生成视频失败: ' + error.message, 'error');
         
-        // 重置步骤状态
-        updateReferenceStepStatus('reference-step-upload', 'error');
-        updateReferenceStepStatus('reference-step-task', 'pending');
-        updateReferenceStepStatus('reference-step-generating', 'pending');
+        const generateResult = await generateResponse.json();
+        
+        if (generateResult.success) {
+            showReferenceTaskProgress(generateResult.task_id);
+            pollReferenceTaskStatus(generateResult.task_id);
+        } else {
+            showToast('生成失败: ' + generateResult.error, 'error');
+        }
+    } catch (error) {
+        console.error('Generation error:', error);
+        showToast('生成过程中发生错误', 'error');
     }
 }
 
 // 轮询参考图任务状态
 function pollReferenceTaskStatus(taskId) {
+    updateReferenceTaskStepStatus('reference-step-generating', '处理中');
+    
     const pollInterval = setInterval(async () => {
         try {
             const response = await fetch(`/task_status/${taskId}`);
-            const data = await response.json();
+            const result = await response.json();
             
-            if (data.status === 'completed') {
+            if (result.status === 'completed') {
                 clearInterval(pollInterval);
-                updateReferenceStepStatus('reference-step-generating', 'completed');
-                updateReferenceStepStatus('reference-step-completed', 'completed');
-                
-                // 显示结果
-                showReferenceResult(data.video_url, data.download_url);
-                
-            } else if (data.status === 'failed') {
+                updateReferenceTaskStepStatus('reference-step-generating', '已完成');
+                updateReferenceTaskStepStatus('reference-step-completed', '已完成');
+                showReferenceResult(result.video_url, result.download_url);
+                showToast('视频生成完成！', 'success');
+            } else if (result.status === 'failed') {
                 clearInterval(pollInterval);
-                updateReferenceStepStatus('reference-step-generating', 'error');
-                showToast('视频生成失败: ' + (data.error || '未知错误'), 'error');
+                updateReferenceTaskStepStatus('reference-step-generating', '失败');
+                updateReferenceTaskStepStatus('reference-step-completed', '失败');
+                showToast('生成失败: ' + result.error, 'error');
             }
-            // 继续轮询其他状态
         } catch (error) {
-            console.error('轮询任务状态失败:', error);
+            console.error('Status polling error:', error);
+            clearInterval(pollInterval);
+            showToast('状态查询失败', 'error');
         }
-    }, 3000); // 每3秒轮询一次
+    }, 2000);
 }
 
-// 更新参考图步骤状态
-function updateReferenceStepStatus(stepId, status) {
-    const stepElement = document.getElementById(stepId);
-    if (!stepElement) return;
-
-    const statusElement = stepElement.querySelector('.step-status');
-    if (!statusElement) return;
-
-    // 移除所有状态类
-    stepElement.classList.remove('pending', 'processing', 'completed', 'error');
-    
-    // 添加新状态类
-    stepElement.classList.add(status);
-    
-    // 更新状态文本
-    const statusTexts = {
-        'pending': '待处理',
-        'processing': '处理中...',
-        'completed': '已完成',
-        'error': '失败'
-    };
-    
-    statusElement.textContent = statusTexts[status] || status;
-}
-
-// 显示参考图生成结果
+// 显示参考图结果
 function showReferenceResult(videoUrl, downloadUrl) {
     const resultSection = document.getElementById('referenceResultSection');
     const resultVideo = document.getElementById('referenceResultVideo');
@@ -1694,151 +944,228 @@ function showReferenceResult(videoUrl, downloadUrl) {
     
     if (resultSection && resultVideo && downloadLink) {
         resultVideo.src = videoUrl;
-        resultVideo.style.display = 'block';
-        
         downloadLink.href = downloadUrl;
-        downloadLink.style.display = 'inline-block';
-        
         resultSection.style.display = 'block';
         
-        showToast('视频生成成功！', 'success');
+        // 显示视频和下载链接
+        resultVideo.style.display = 'block';
+        downloadLink.style.display = 'inline-block';
     }
 }
 
-// 生成新的参考图视频
-function generateNewVideo(mode) {
-    if (mode === 'reference') {
+// 选择节点类型
+function selectNodeType(type) {
+    selectedNodeType = type;
+    
+    // 更新UI状态
+    const nodeTypeCards = document.querySelectorAll('.node-type-card');
+    nodeTypeCards.forEach(card => {
+        card.classList.remove('active');
+        if (card.dataset.type === type) {
+            card.classList.add('active');
+        }
+    });
+    
+    // 更新指示器
+    const indicator = document.getElementById('selectedTypeIndicator');
+    if (indicator) {
+        indicator.textContent = type === 'video' ? '已选择：视频节点' : '已选择：音频节点';
+    }
+    
+    // 启用添加节点按钮
+    const addNodeButton = document.getElementById('addNodeButton');
+    if (addNodeButton) {
+        addNodeButton.disabled = false;
+    }
+    
+    console.log('Selected node type:', type);
+}
+
+// 显示合并任务进度
+function showMergeTaskProgress(taskId) {
+    const taskProgress = document.getElementById('mergeTaskProgress');
+    
+    if (taskProgress) {
+        taskProgress.style.display = 'block';
+    }
+    
+    // 更新步骤状态
+    updateMergeTaskStepStatus('merge-validate-status', '已完成');
+}
+
+// 更新合并任务步骤状态
+function updateMergeTaskStepStatus(stepId, status) {
+    const statusElement = document.getElementById(stepId);
+    if (statusElement) {
+        statusElement.textContent = status;
+        
+        // 更新样式
+        const step = statusElement.closest('.task-step');
+        if (step) {
+            step.classList.remove('pending', 'processing', 'completed', 'failed');
+            if (status === '已完成') {
+                step.classList.add('completed');
+            } else if (status === '处理中') {
+                step.classList.add('processing');
+            } else if (status === '失败') {
+                step.classList.add('failed');
+            } else {
+                step.classList.add('pending');
+            }
+        }
+    }
+}
+
+// 显示参考图任务进度
+function showReferenceTaskProgress(taskId) {
+    const taskProgress = document.getElementById('referenceTaskProgress');
+    const taskIdDisplay = document.getElementById('reference-task-id-display');
+    
+    if (taskProgress) {
+        taskProgress.style.display = 'block';
+    }
+    
+    if (taskIdDisplay) {
+        taskIdDisplay.textContent = `任务ID: ${taskId}`;
+    }
+    
+    // 更新步骤状态
+    updateReferenceTaskStepStatus('reference-step-upload', '已完成');
+    updateReferenceTaskStepStatus('reference-step-task', '已完成');
+}
+
+// 更新参考图任务步骤状态
+function updateReferenceTaskStepStatus(stepId, status) {
+    const step = document.getElementById(stepId);
+    if (step) {
+        const statusElement = step.querySelector('.step-status');
+        if (statusElement) {
+            statusElement.textContent = status;
+            
+            // 更新样式
+            step.classList.remove('pending', 'processing', 'completed', 'failed');
+            if (status === '已完成') {
+                step.classList.add('completed');
+            } else if (status === '处理中') {
+                step.classList.add('processing');
+            } else if (status === '失败') {
+                step.classList.add('failed');
+            } else {
+                step.classList.add('pending');
+            }
+        }
+    }
+}
+
+// 生成新视频（通用函数）
+function generateNewVideo(type) {
+    if (type === 'reference') {
         // 隐藏结果和进度区域
         const resultSection = document.getElementById('referenceResultSection');
-        const progressSection = document.getElementById('referenceTaskProgress');
+        const taskProgress = document.getElementById('referenceTaskProgress');
         
         if (resultSection) resultSection.style.display = 'none';
-        if (progressSection) progressSection.style.display = 'none';
+        if (taskProgress) taskProgress.style.display = 'none';
         
-        // 重置所有步骤状态
-        ['reference-step-upload', 'reference-step-task', 'reference-step-generating', 'reference-step-completed'].forEach(stepId => {
-            updateReferenceStepStatus(stepId, 'pending');
+        // 清空输入字段
+        ['ref1Input', 'ref2Input', 'ref3Input', 'ref4Input'].forEach(id => {
+            const input = document.getElementById(id);
+            const preview = document.getElementById(id.replace('Input', 'Preview'));
+            const uploadArea = document.getElementById(id.replace('Input', 'UploadArea'));
+            
+            if (input) input.value = '';
+            if (preview) preview.innerHTML = '';
+            if (uploadArea) uploadArea.style.display = 'flex';
         });
         
-        // 清空任务ID显示
-        const taskIdDisplay = document.getElementById('reference-task-id-display');
-        if (taskIdDisplay) {
-            taskIdDisplay.textContent = '等待创建任务ID...';
-        }
+        // 更新按钮状态
+        updateReferenceButtonState();
     }
 }
 
-// 切换帮助面板
-function toggleHelpPanel() {
-    const helpPanel = document.getElementById('helpPanel');
-    if (helpPanel) {
-        const isVisible = helpPanel.style.display !== 'none';
-        helpPanel.style.display = isVisible ? 'none' : 'block';
-        
-        // 添加动画效果
-        if (!isVisible) {
-            helpPanel.style.opacity = '0';
-            helpPanel.style.transform = 'translateX(100%)';
-            setTimeout(() => {
-                helpPanel.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-                helpPanel.style.opacity = '1';
-                helpPanel.style.transform = 'translateX(0)';
-            }, 10);
-        }
-    }
-}
-
-// 初始化工具提示
-function initializeTooltips() {
-    // 为所有带有 data-tooltip 属性的元素添加工具提示
-    document.querySelectorAll('[data-tooltip]').forEach(element => {
-        element.addEventListener('mouseenter', function(e) {
-            const tooltip = document.createElement('div');
-            tooltip.className = 'tooltip-popup';
-            tooltip.textContent = this.getAttribute('data-tooltip');
-            
-            // 设置位置
-            const rect = this.getBoundingClientRect();
-            tooltip.style.position = 'fixed';
-            tooltip.style.left = rect.left + 'px';
-            tooltip.style.top = (rect.top - 35) + 'px';
-            tooltip.style.zIndex = '10000';
-            
-            document.body.appendChild(tooltip);
-            
-            // 存储引用以便清理
-            this._tooltip = tooltip;
-        });
-        
-        element.addEventListener('mouseleave', function() {
-            if (this._tooltip) {
-                document.body.removeChild(this._tooltip);
-                this._tooltip = null;
+// 页面加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    // 初始化模式选择按钮事件
+    const modeButtons = document.querySelectorAll('.mode-button');
+    console.log('Found mode buttons:', modeButtons.length);
+    modeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const mode = button.getAttribute('data-mode');
+            console.log('Mode button clicked:', mode);
+            if (mode) {
+                showGenerationPage(mode);
+                console.log('Switching to page:', mode + '-page');
             }
         });
     });
-}
-
-// 初始化节点状态工具提示
-function initializeNodeStatusTooltips() {
-    // 为节点状态指示器添加工具提示
-    document.addEventListener('mouseenter', function(e) {
-        if (e.target.classList.contains('node-status-indicator')) {
-            const status = e.target.getAttribute('data-status');
-            const tooltipTexts = {
-                'idle': '空闲：节点已创建但未上传文件',
-                'ready': '就绪：文件已上传，等待处理',
-                'processing': '处理中：正在处理文件',
-                'completed': '完成：处理完成',
-                'error': '错误：处理过程中出现错误'
-            };
-            
-            const tooltipText = tooltipTexts[status] || '未知状态';
-            
-            const tooltip = document.createElement('div');
-            tooltip.className = 'tooltip-popup status-tooltip';
-            tooltip.textContent = tooltipText;
-            
-            const rect = e.target.getBoundingClientRect();
-            tooltip.style.position = 'fixed';
-            tooltip.style.left = rect.left + 'px';
-            tooltip.style.top = (rect.top - 35) + 'px';
-            tooltip.style.zIndex = '10000';
-            
-            document.body.appendChild(tooltip);
-            e.target._statusTooltip = tooltip;
-        }
-    }, true);
     
-    document.addEventListener('mouseleave', function(e) {
-        if (e.target.classList.contains('node-status-indicator') && e.target._statusTooltip) {
-            document.body.removeChild(e.target._statusTooltip);
-            e.target._statusTooltip = null;
-        }
-    }, true);
-}
-
-document.addEventListener('DOMContentLoaded', function() {
-    // 初始化模式选择按钮
-    document.querySelectorAll('.mode-button').forEach(button => {
-        button.addEventListener('click', function() {
-            const mode = this.getAttribute('data-mode');
-            showGenerationPage(mode);
+    // 初始化各个模块
+    initializeMergeMode();
+    initializeFirstLastUpload();
+    initializeReferenceUpload();
+    
+    // 初始化参考图生成按钮事件
+    const generateReferenceBtn = document.getElementById('generateReferenceVideo');
+    if (generateReferenceBtn) {
+        generateReferenceBtn.addEventListener('click', generateReferenceVideo);
+    }
+    
+    const clearReferenceBtn = document.getElementById('clearReferenceImages');
+    if (clearReferenceBtn) {
+        clearReferenceBtn.addEventListener('click', () => {
+            ['ref1Input', 'ref2Input', 'ref3Input', 'ref4Input'].forEach(id => {
+                const input = document.getElementById(id);
+                const preview = document.getElementById(id.replace('Input', 'Preview'));
+                const uploadArea = document.getElementById(id.replace('Input', 'UploadArea'));
+                
+                if (input) input.value = '';
+                if (preview) preview.innerHTML = '';
+                if (uploadArea) uploadArea.style.display = 'flex';
+            });
+            updateReferenceButtonState();
+        });
+    }
+    
+    // 初始化节点类型选择器
+    const nodeTypeCards = document.querySelectorAll('.node-type-card');
+    nodeTypeCards.forEach(card => {
+        card.addEventListener('click', () => {
+            selectNodeType(card.dataset.type);
         });
     });
     
-    // 初始化视频合并模式
-    initializeMergeMode();
+    // 默认选择视频节点
+    selectNodeType('video');
     
-    // 初始化首尾帧上传功能
-    initializeFirstLastUpload();
+    // 添加节点按钮
+    const addNodeBtn = document.getElementById('addNodeButton');
+    if (addNodeBtn) {
+        addNodeBtn.addEventListener('click', () => {
+            if (selectedNodeType === 'video') {
+                addVideoNode();
+            } else if (selectedNodeType === 'audio') {
+                addAudioNode();
+            }
+        });
+    }
     
-    // 初始化参考图上传功能
-    initializeReferenceUpload();
+    // 创建新合并按钮
+    const createNewMergeBtn = document.getElementById('createNewMerge');
+    if (createNewMergeBtn) {
+        createNewMergeBtn.addEventListener('click', () => {
+            // 隐藏结果和进度区域
+            const resultSection = document.getElementById('mergeResultSection');
+            const taskProgress = document.getElementById('mergeTaskProgress');
+            
+            if (resultSection) resultSection.style.display = 'none';
+            if (taskProgress) taskProgress.style.display = 'none';
+            
+            // 清空节点
+            clearVideoNodes(false);
+            
+            showToast('已重置，可以创建新的合并任务', 'info');
+        });
+    }
     
-    // 初始化工具提示
-    initializeTooltips();
-    
-    // 初始化节点状态工具提示
-    initializeNodeStatusTooltips();
+    console.log('Application initialized successfully');
 });

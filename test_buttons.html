@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>按钮测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        button { margin: 5px; padding: 10px 20px; }
+    </style>
+</head>
+<body>
+    <h1>模式选择按钮测试</h1>
+    <div id="test-results"></div>
+    
+    <button onclick="testModeButtons()">测试模式按钮</button>
+    <button onclick="openMainApp()">打开主应用</button>
+    
+    <script>
+        function addResult(message, isSuccess = true) {
+            const resultsDiv = document.getElementById('test-results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${isSuccess ? 'success' : 'error'}`;
+            resultDiv.textContent = message;
+            resultsDiv.appendChild(resultDiv);
+        }
+        
+        function testModeButtons() {
+            // 清空之前的结果
+            document.getElementById('test-results').innerHTML = '';
+            
+            // 在新窗口中打开主应用进行测试
+            const testWindow = window.open('http://localhost:5000', '_blank');
+            
+            setTimeout(() => {
+                try {
+                    // 检查模式选择按钮是否存在
+                    const modeButtons = testWindow.document.querySelectorAll('.mode-button');
+                    if (modeButtons.length === 3) {
+                        addResult(`✓ 找到 ${modeButtons.length} 个模式选择按钮`);
+                        
+                        // 测试每个按钮
+                        modeButtons.forEach((button, index) => {
+                            const mode = button.getAttribute('data-mode');
+                            addResult(`✓ 按钮 ${index + 1}: data-mode="${mode}"`);
+                            
+                            // 模拟点击
+                            button.click();
+                            
+                            setTimeout(() => {
+                                const targetPage = testWindow.document.getElementById(`${mode}-page`);
+                                if (targetPage && targetPage.style.display !== 'none') {
+                                    addResult(`✓ ${mode} 模式页面显示正常`);
+                                } else {
+                                    addResult(`✗ ${mode} 模式页面未正确显示`, false);
+                                }
+                            }, 100);
+                        });
+                    } else {
+                        addResult(`✗ 模式选择按钮数量不正确: ${modeButtons.length}`, false);
+                    }
+                } catch (error) {
+                    addResult(`✗ 测试出错: ${error.message}`, false);
+                }
+            }, 2000);
+        }
+        
+        function openMainApp() {
+            window.open('http://localhost:5000', '_blank');
+        }
+    </script>
+</body>
+</html>

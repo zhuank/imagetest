@@ -7,10 +7,66 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+    <!-- 主题切换按钮 -->
+    <button class="theme-toggle" id="themeToggle" title="切换主题">
+        <svg class="sun-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="moon-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+    </button>
+    
+    <!-- 帮助按钮 -->
+    <button class="help-toggle" id="helpToggle" title="帮助和引导">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+    </button>
+    
     <div class="container">
         <header>
-            <h1>BytePlus ModelArk Seedance 视频生成测试</h1>
-            <p>选择生成模式，上传图片，生成AI视频</p>
+            <div class="header-content">
+                <div class="header-text">
+                    <h1>BytePlus ModelArk Seedance 视频生成测试</h1>
+                    <p>选择生成模式，上传图片，生成AI视频</p>
+                </div>
+                <div class="header-actions">
+                    <button class="help-button" id="helpButton" title="查看使用指南">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </button>
+                    <button class="theme-toggle" id="themeToggle" title="切换主题">
+                        <svg class="theme-icon sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="5"></circle>
+                            <line x1="12" y1="1" x2="12" y2="3"></line>
+                            <line x1="12" y1="21" x2="12" y2="23"></line>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                            <line x1="1" y1="12" x2="3" y2="12"></line>
+                            <line x1="21" y1="12" x2="23" y2="12"></line>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                        </svg>
+                        <svg class="theme-icon moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
         </header>
 
         <main>
@@ -597,20 +653,16 @@
                     <div class="video-nodes-section">
                         <div class="section-header">
                             <h3>节点工作流程</h3>
-                            <div class="workflow-controls">
-                                <button type="button" id="addVideoNode" class="btn btn-primary" disabled>
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                                    </svg>
-                                    添加节点
-                                </button>
+                            <div class="workflow-info">
                                 <span class="selected-type-indicator" id="selectedTypeIndicator">请先选择节点类型</span>
                             </div>
                         </div>
                         
                         <div id="videoNodesList" class="video-nodes-workflow">
-                            <div class="empty-workflow-message">
+                            <!-- 节点将通过JavaScript动态渲染 -->
+                            
+                            <!-- 空状态消息 -->
+                            <div class="empty-workflow-message" id="emptyWorkflowMessage">
                                 <div class="empty-icon">
                                     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
                                         <circle cx="12" cy="12" r="10"></circle>
@@ -619,25 +671,133 @@
                                     </svg>
                                 </div>
                                 <h4>开始构建您的工作流程</h4>
-                                <p>选择上方的节点类型，然后点击"添加节点"开始构建处理流程</p>
+                                <p>选择上方的节点类型，然后点击下方的"添加节点"开始构建处理流程</p>
                             </div>
+                            
                             <div class="workflow-connections" id="workflowConnections"></div>
                         </div>
                         
-                        <div class="merge-actions">
-                            <button type="button" id="clearVideoNodes" class="btn btn-secondary">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="3,6 5,6 21,6"></polyline>
-                                    <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
-                                </svg>
-                                清空所有节点
-                            </button>
-                            <button type="button" id="mergeVideos" class="btn btn-success" disabled>
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polygon points="5,3 19,12 5,21 5,3"></polygon>
-                                </svg>
-                                开始处理
-                            </button>
+                        <div class="workflow-controls">
+                            <!-- 批量操作按钮 -->
+                            <div class="batch-operations" id="batchOperations" style="display: none;">
+                                <button type="button" id="selectAllNodes" class="btn btn-outline">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M9 11l3 3L22 4"></path>
+                                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                                    </svg>
+                                    全选
+                                </button>
+                                <button type="button" id="copySelectedNodes" class="btn btn-outline" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                    复制
+                                </button>
+                                <button type="button" id="pasteNodes" class="btn btn-outline" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                                        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                                    </svg>
+                                    粘贴
+                                </button>
+                                <button type="button" id="deleteSelectedNodes" class="btn btn-danger" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3,6 5,6 21,6"></polyline>
+                                        <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
+                                    </svg>
+                                    删除选中
+                                </button>
+                            </div>
+                            
+                            <!-- 模板和预设按钮 -->
+                            <div class="template-controls">
+                                <button type="button" id="showTemplateSelector" class="btn btn-outline">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                        <line x1="9" y1="9" x2="15" y2="9"></line>
+                                        <line x1="9" y1="12" x2="15" y2="12"></line>
+                                        <line x1="9" y1="15" x2="15" y2="15"></line>
+                                    </svg>
+                                    节点模板
+                                </button>
+                                <button type="button" id="showPresetSelector" class="btn btn-outline">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+                                    </svg>
+                                    预设配置
+                                </button>
+                            </div>
+                            
+                            <!-- 撤销重做按钮 -->
+                            <div class="undo-redo-controls">
+                                <button type="button" id="undoOperation" class="btn btn-outline" disabled title="撤销 (Ctrl+Z)">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M3 7v6h6"></path>
+                                        <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path>
+                                    </svg>
+                                    撤销
+                                </button>
+                                <button type="button" id="redoOperation" class="btn btn-outline" disabled title="重做 (Ctrl+Y)">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 7v6h-6"></path>
+                                        <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path>
+                                    </svg>
+                                    重做
+                                </button>
+                            </div>
+                            
+                            <!-- 工作流程管理按钮 -->
+                            <div class="workflow-management">
+                                <button type="button" id="saveWorkflow" class="btn btn-outline">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                        <polyline points="17,21 17,13 7,13 7,21"></polyline>
+                                        <polyline points="7,3 7,8 15,8"></polyline>
+                                    </svg>
+                                    保存工作流
+                                </button>
+                                <button type="button" id="loadWorkflow" class="btn btn-outline">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14,2 14,8 20,8"></polyline>
+                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                        <polyline points="10,9 9,9 8,9"></polyline>
+                                    </svg>
+                                    加载工作流
+                                </button>
+                                <input type="file" id="workflowFileInput" accept=".json" style="display: none;">
+                            </div>
+                            
+                            <!-- 添加节点按钮 -->
+                            <div class="add-node-section">
+                                <button type="button" id="addNodeButton" class="btn btn-primary" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="12" y1="8" x2="12" y2="16"></line>
+                                        <line x1="8" y1="12" x2="16" y2="12"></line>
+                                    </svg>
+                                    添加节点
+                                </button>
+                            </div>
+                            
+                            <!-- 工作流程操作按钮 -->
+                            <div class="merge-actions">
+                                <button type="button" id="clearVideoNodes" class="btn btn-secondary">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3,6 5,6 21,6"></polyline>
+                                        <path d="m19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
+                                    </svg>
+                                    清空所有节点
+                                </button>
+                                <button type="button" id="mergeVideos" class="btn btn-success" disabled>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polygon points="5,3 19,12 5,21 5,3"></polygon>
+                                    </svg>
+                                    开始处理
+                                </button>
+                            </div>
                         </div>
                     </div>
                     
@@ -717,6 +877,10 @@
                     <div class="node-card">
                         <!-- 节点头部 -->
                         <div class="node-header">
+                            <div class="node-selection">
+                                <input type="checkbox" class="node-checkbox" id="checkbox_{nodeId}" data-node-id="{nodeId}">
+                                <label for="checkbox_{nodeId}" class="node-checkbox-label"></label>
+                            </div>
                             <div class="node-status-indicator" data-status="idle">
                                 <div class="status-dot"></div>
                             </div>
@@ -831,6 +995,46 @@
 
     <div class="toast" id="toast"></div>
 
+    <!-- 模板选择器弹窗 -->
+    <div class="modal-overlay" id="templateSelectorModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>选择节点模板</h3>
+                <button type="button" class="btn-close-modal" onclick="closeTemplateSelector()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="template-grid" id="templateGrid">
+                    <!-- 模板项将通过JavaScript动态生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 预设配置选择器弹窗 -->
+    <div class="modal-overlay" id="presetSelectorModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>选择预设配置</h3>
+                <button type="button" class="btn-close-modal" onclick="closePresetSelector()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="preset-grid" id="presetGrid">
+                    <!-- 预设项将通过JavaScript动态生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 帮助面板 -->
     <div class="help-panel" id="helpPanel" style="display: none;">
         <div class="help-panel-header">
@@ -873,14 +1077,471 @@
         </div>
     </div>
 
-    <!-- 帮助按钮 -->
-    <button type="button" class="help-button" onclick="toggleHelpPanel()" title="显示帮助信息">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-        </svg>
-    </button>
+    <!-- 分组管理面板 -->
+    <div class="group-management-panel" id="groupManagementPanel" style="display: none;">
+        <div class="panel-header">
+            <h3>节点分组管理</h3>
+            <button type="button" class="btn-close-panel" onclick="toggleGroupManagement()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="panel-content">
+            <div class="create-group-section">
+                <input type="text" id="newGroupName" placeholder="输入分组名称" class="group-input">
+                <button type="button" class="btn btn-primary" onclick="createGroup()">创建分组</button>
+            </div>
+            <div class="groups-list" id="groupsList">
+                <!-- 分组列表将通过JavaScript动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 标签管理面板 -->
+    <div class="tag-management-panel" id="tagManagementPanel" style="display: none;">
+        <div class="panel-header">
+            <h3>节点标签管理</h3>
+            <button type="button" class="btn-close-panel" onclick="toggleTagManagement()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="panel-content">
+            <div class="create-tag-section">
+                <input type="text" id="newTagName" placeholder="输入标签名称" class="tag-input">
+                <select id="tagColor" class="tag-color-select">
+                    <option value="blue">蓝色</option>
+                    <option value="green">绿色</option>
+                    <option value="red">红色</option>
+                    <option value="yellow">黄色</option>
+                    <option value="purple">紫色</option>
+                    <option value="orange">橙色</option>
+                </select>
+                <button type="button" class="btn btn-primary" onclick="createTag()">创建标签</button>
+            </div>
+            <div class="tags-list" id="tagsList">
+                <!-- 标签列表将通过JavaScript动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 节点右键菜单 -->
+    <div class="context-menu" id="nodeContextMenu" style="display: none;">
+        <div class="context-menu-item" onclick="copyNode()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            复制节点
+        </div>
+        <div class="context-menu-item" onclick="pasteNode()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+            </svg>
+            粘贴节点
+        </div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" onclick="showGroupSelector()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            添加到分组
+        </div>
+        <div class="context-menu-item" onclick="showTagSelector()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                <line x1="7" y1="7" x2="7.01" y2="7"></line>
+            </svg>
+            添加标签
+        </div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item danger" onclick="deleteSelectedNodes()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3,6 5,6 21,6"></polyline>
+                <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"></path>
+            </svg>
+            删除节点
+        </div>
+    </div>
+
+    <!-- 分组选择器模态框 -->
+    <div class="modal-overlay" id="groupSelectorModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>选择分组</h3>
+                <button type="button" class="btn-close-modal" onclick="closeGroupSelector()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="group-selector-list" id="groupSelectorList">
+                    <!-- 分组选项将通过JavaScript动态生成 -->
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeGroupSelector()">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="applyGroupSelection()">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 标签选择器模态框 -->
+    <div class="modal-overlay" id="tagSelectorModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>选择标签</h3>
+                <button type="button" class="btn-close-modal" onclick="closeTagSelector()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="tag-selector-list" id="tagSelectorList">
+                    <!-- 标签选项将通过JavaScript动态生成 -->
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeTagSelector()">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="applyTagSelection()">确定</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户引导模态框 -->
+    <div class="modal-overlay" id="userGuideModal" style="display: none;">
+        <div class="modal-content user-guide-modal">
+            <div class="modal-header">
+                <h3>使用指南</h3>
+                <button type="button" class="btn-close-modal" onclick="closeUserGuide()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="guide-content">
+                    <div class="guide-section">
+                        <div class="guide-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                <polyline points="21,15 16,10 5,21"></polyline>
+                            </svg>
+                        </div>
+                        <div class="guide-text">
+                            <h4>首尾帧生成</h4>
+                            <p>上传首帧和尾帧图片，AI将生成中间过渡视频。适合创建平滑的图片转场效果。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="guide-section">
+                        <div class="guide-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="7" height="7"></rect>
+                                <rect x="14" y="3" width="7" height="7"></rect>
+                                <rect x="3" y="14" width="7" height="7"></rect>
+                                <rect x="14" y="14" width="7" height="7"></rect>
+                            </svg>
+                        </div>
+                        <div class="guide-text">
+                            <h4>参考图生成</h4>
+                            <p>上传1-4张参考图片，AI基于这些图片生成视频内容。支持多样化的创意表达。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="guide-section">
+                        <div class="guide-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path>
+                                <line x1="12" y1="3" x2="12" y2="21"></line>
+                                <line x1="16" y1="12" x2="20" y2="12"></line>
+                                <line x1="4" y1="12" x2="8" y2="12"></line>
+                            </svg>
+                        </div>
+                        <div class="guide-text">
+                            <h4>视频合并编辑</h4>
+                            <p>将多个生成的视频按顺序拼接。支持拖拽排序、批量操作和工作流保存。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="guide-section">
+                        <div class="guide-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M9 12l2 2 4-4"></path>
+                                <path d="M21 12c-1 0-3-1-3-3s2-3 3-3 3 1 3 3-2 3-3 3"></path>
+                                <path d="M3 12c1 0 3-1 3-3s-2-3-3-3-3 1-3 3 2 3 3 3"></path>
+                                <path d="M12 3c0 1-1 3-3 3s-3-2-3-3 1-3 3-3 3 2 3 3"></path>
+                                <path d="M12 21c0-1 1-3 3-3s3 2 3 3-1 3-3 3-3-2-3-3"></path>
+                            </svg>
+                        </div>
+                        <div class="guide-text">
+                            <h4>快捷键操作</h4>
+                            <ul>
+                                <li><kbd>Ctrl+Z</kbd> 撤销操作</li>
+                                <li><kbd>Ctrl+Y</kbd> 重做操作</li>
+                                <li><kbd>Delete</kbd> 删除选中节点</li>
+                                <li><kbd>Ctrl+A</kbd> 全选节点</li>
+                                <li><kbd>Ctrl+S</kbd> 保存工作流</li>
+                                <li><kbd>Space</kbd> 播放/暂停预览</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="guide-footer">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="dontShowAgain">
+                        <span class="checkmark"></span>
+                        不再显示此引导
+                    </label>
+                    <button type="button" class="btn btn-primary" onclick="closeUserGuide()">开始使用</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 帮助模态框 -->
+    <div class="modal-overlay" id="helpModal" style="display: none;">
+        <div class="modal-content help-modal">
+            <div class="modal-header">
+                <h2>帮助和引导</h2>
+                <button class="close-modal" onclick="closeHelpModal()">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="help-content">
+                <div class="help-section">
+                    <h3>🚀 快速开始</h3>
+                    <div class="feature-highlight">
+                        <h4>欢迎使用视频合并编辑器！</h4>
+                        <p>这是一个专业的视频处理工具，支持多种格式的视频文件合并、编辑和处理。</p>
+                    </div>
+                    <p>使用步骤：</p>
+                    <ul>
+                        <li>选择节点类型（视频或音频）</li>
+                        <li>点击"添加节点"按钮或拖拽文件到工作区</li>
+                        <li>调整节点顺序和参数</li>
+                        <li>点击"开始处理"进行合并</li>
+                    </ul>
+                </div>
+
+                <div class="help-section">
+                    <h3>⌨️ 键盘快捷键</h3>
+                    <p>使用快捷键提高工作效率：</p>
+                    <ul>
+                        <li><span class="keyboard-shortcut">Ctrl + Z</span> 撤销操作</li>
+                        <li><span class="keyboard-shortcut">Ctrl + Y</span> 重做操作</li>
+                        <li><span class="keyboard-shortcut">Delete</span> 删除选中节点</li>
+                        <li><span class="keyboard-shortcut">Ctrl + A</span> 全选节点</li>
+                        <li><span class="keyboard-shortcut">Ctrl + C</span> 复制节点</li>
+                        <li><span class="keyboard-shortcut">Ctrl + V</span> 粘贴节点</li>
+                        <li><span class="keyboard-shortcut">Ctrl + S</span> 保存工作流</li>
+                        <li><span class="keyboard-shortcut">Ctrl + O</span> 加载工作流</li>
+                        <li><span class="keyboard-shortcut">Escape</span> 取消选择</li>
+                    </ul>
+                </div>
+
+                <div class="help-section">
+                    <h3>🎯 核心功能</h3>
+                    <div class="feature-highlight">
+                        <h4>节点管理</h4>
+                        <p>支持拖拽排序、批量操作、分组管理和标签分类。</p>
+                    </div>
+                    <ul>
+                        <li><strong>文件上传：</strong>支持拖拽上传，自动格式检测</li>
+                        <li><strong>节点编辑：</strong>可调整播放速度、音量、裁剪时间</li>
+                        <li><strong>批量操作：</strong>支持全选、批量删除、批量设置</li>
+                        <li><strong>工作流管理：</strong>保存和加载工作流配置</li>
+                        <li><strong>实时预览：</strong>支持视频缩略图预览</li>
+                    </ul>
+                </div>
+
+                <div class="help-section">
+                    <h3>🔧 高级功能</h3>
+                    <ul>
+                        <li><strong>分组管理：</strong>右键节点选择"添加到分组"</li>
+                        <li><strong>标签系统：</strong>为节点添加自定义标签</li>
+                        <li><strong>模板预设：</strong>保存常用的节点配置</li>
+                        <li><strong>异步处理：</strong>大文件后台处理，实时进度显示</li>
+                        <li><strong>自动保存：</strong>工作进度自动保存到本地</li>
+                    </ul>
+                </div>
+
+                <div class="help-section">
+                    <h3>💡 使用技巧</h3>
+                    <ul>
+                        <li>使用右键菜单快速访问节点操作</li>
+                        <li>拖拽节点边缘可调整播放时长</li>
+                        <li>双击节点可快速编辑参数</li>
+                        <li>使用分组功能管理复杂的工作流</li>
+                        <li>定期保存工作流避免数据丢失</li>
+                    </ul>
+                </div>
+
+                <div class="help-section">
+                    <h3>🎨 界面定制</h3>
+                    <ul>
+                        <li>点击右上角月亮图标切换暗色主题</li>
+                        <li>界面支持响应式设计，适配各种屏幕</li>
+                        <li>移动端支持触摸操作和手势</li>
+                    </ul>
+                </div>
+
+                <div class="help-section">
+                    <h3>❓ 常见问题</h3>
+                    <ul>
+                        <li><strong>文件上传失败：</strong>检查文件格式和大小限制</li>
+                        <li><strong>处理速度慢：</strong>大文件建议分段处理</li>
+                        <li><strong>预览不显示：</strong>确保浏览器支持视频格式</li>
+                        <li><strong>快捷键无效：</strong>确保焦点在工作区内</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 节点模板选择器模态框 -->
+    <div class="modal-overlay" id="templateModal" style="display: none;">
+        <div class="modal-content template-modal">
+            <div class="modal-header">
+                <h3>选择节点模板</h3>
+                <button type="button" class="btn-close-modal" onclick="closeTemplateModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="template-categories">
+                    <button class="category-btn active" data-category="all">全部</button>
+                    <button class="category-btn" data-category="video">视频</button>
+                    <button class="category-btn" data-category="audio">音频</button>
+                    <button class="category-btn" data-category="custom">自定义</button>
+                </div>
+                <div class="template-grid" id="templateGrid">
+                    <!-- 模板卡片将通过JavaScript动态生成 -->
+                </div>
+                <div class="template-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeTemplateModal()">取消</button>
+                    <button type="button" class="btn btn-primary" id="applyTemplate" disabled>应用模板</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 预设配置选择器模态框 -->
+    <div class="modal-overlay" id="presetModal" style="display: none;">
+        <div class="modal-content preset-modal">
+            <div class="modal-header">
+                <h3>选择预设配置</h3>
+                <button type="button" class="btn-close-modal" onclick="closePresetModal()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="preset-categories">
+                    <button class="category-btn active" data-category="all">全部</button>
+                    <button class="category-btn" data-category="basic">基础</button>
+                    <button class="category-btn" data-category="advanced">高级</button>
+                    <button class="category-btn" data-category="custom">自定义</button>
+                </div>
+                <div class="preset-grid" id="presetGrid">
+                    <!-- 预设卡片将通过JavaScript动态生成 -->
+                </div>
+                <div class="preset-actions">
+                    <button type="button" class="btn btn-outline" id="saveCurrentPreset">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17,21 17,13 7,13 7,21"></polyline>
+                            <polyline points="7,3 7,8 15,8"></polyline>
+                        </svg>
+                        保存当前为预设
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closePresetModal()">取消</button>
+                    <button type="button" class="btn btn-primary" id="applyPreset" disabled>应用预设</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 保存预设对话框 -->
+    <div class="modal-overlay" id="savePresetDialog" style="display: none;">
+        <div class="modal-content save-preset-dialog">
+            <div class="modal-header">
+                <h3>保存预设配置</h3>
+                <button type="button" class="btn-close-modal" onclick="closeSavePresetDialog()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="presetName">预设名称</label>
+                    <input type="text" id="presetName" placeholder="输入预设名称..." required>
+                </div>
+                <div class="form-group">
+                    <label for="presetDescription">描述（可选）</label>
+                    <textarea id="presetDescription" rows="3" placeholder="描述这个预设的用途..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="presetCategory">分类</label>
+                    <select id="presetCategory">
+                        <option value="custom">自定义</option>
+                        <option value="basic">基础</option>
+                        <option value="advanced">高级</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSavePresetDialog()">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmSavePreset">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史面板 -->
+    <div class="history-panel" id="historyPanel" style="display: none;">
+        <div class="history-header">
+            <h3>操作历史</h3>
+            <button type="button" class="btn-close-panel" onclick="toggleHistoryPanel()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="history-content" id="historyContent">
+            <div class="history-empty">
+                <p>暂无操作历史</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知容器 -->
+    <div class="notification-container" id="notificationContainer"></div>
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
